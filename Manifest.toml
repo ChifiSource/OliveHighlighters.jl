@@ -1,0 +1,18 @@
+# This file is machine-generated - editing it directly is not advised
+
+julia_version = "1.9.2"
+manifest_format = "2.0"
+project_hash = "541ffa165ceec2ef2d1387f2ee0b9389336f52ff"
+
+[[deps.Base64]]
+uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
+
+[[deps.Markdown]]
+deps = ["Base64"]
+uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
+
+[[deps.ToolipsServables]]
+deps = ["Base64", "Markdown"]
+git-tree-sha1 = "4913d8fdb9c11a2f3e10ca050a04c44e71e2c597"
+uuid = "bf3a9e68-ca66-4981-8178-9d71c4f8abaa"
+version = "0.1.5"
