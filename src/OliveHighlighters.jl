@@ -1,6 +1,6 @@
 module OliveHighlighters
 using ToolipsServables
-import ToolipsServables: Modifier, String, AbstractComponent
+import ToolipsServables: Modifier, String, AbstractComponent, set_text!, push!, style!, string
 """
 ### abstract type TextModifier <: Toolips.Modifier
 TextModifiers are modifiers that change outgoing text into different forms,
@@ -33,7 +33,7 @@ mutable struct TextStyleModifier <: TextModifier
     taken::Vector{Int64}
     marks::Dict{UnitRange{Int64}, Symbol}
     styles::Dict{Symbol, Vector{Pair{String, String}}}
-    function TextStyleModifier(raw::String)
+    function TextStyleModifier(raw::String = "")
         marks = Dict{Symbol, UnitRange{Int64}}()
         styles = Dict{Symbol, Vector{Pair{String, String}}}()
         new(replace(raw, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " "), Vector{Int64}(), marks, styles)
@@ -407,9 +407,9 @@ function string(tm::TextStyleModifier)
     if length(tm.marks) == 0
         txt = a("modiftxt", text = rep_str(tm.raw))
         style!(txt, tm.styles[:default] ...)
-        sting(text)::String
+        sting(txt)::String
     end
-    prev = 1
+    prev::Int64 = 1
     finales::Vector{AbstractComponent} = Vector{AbstractComponent}()
     sortedmarks = sort(collect(tm.marks), by=x->x[1])
     lastmax::Int64 = length(tm.raw)
@@ -422,7 +422,7 @@ function string(tm::TextStyleModifier)
                 style!(txt, tm.styles[:default] ...)
                 push!(finales, txt)
             end
-            txt::Component{:span} = span("modiftxt", text = rep_str(tm.raw[mark]))
+            txt = span("modiftxt", text = rep_str(tm.raw[mark]))
             if mname in keys(tm.styles)
                 style!(txt, tm.styles[mname] ...)   
             else
@@ -436,7 +436,7 @@ function string(tm::TextStyleModifier)
         end
     end for (e, mark) in enumerate((k[1] for k in sortedmarks))]
     if lastmax != length(tm.raw)
-        txt::Component{:span} = span("modiftxt", text = rep_str(tm.raw[lastmax + 1:length(tm.raw)]))
+        txt = span("modiftxt", text = rep_str(tm.raw[lastmax + 1:length(tm.raw)]))
         style!(txt, tm.styles[:default] ...)
         push!(finales, txt)
     end
