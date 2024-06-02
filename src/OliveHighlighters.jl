@@ -36,11 +36,16 @@ mutable struct TextStyleModifier <: TextModifier
     function TextStyleModifier(raw::String = "")
         marks = Dict{Symbol, UnitRange{Int64}}()
         styles = Dict{Symbol, Vector{Pair{String, String}}}()
-        new(replace(raw, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " "), Vector{Int64}(), marks, styles)
+        new(replace(raw, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ", 
+        "&#40;" => "(", "&#41;" => ")"), Vector{Int64}(), marks, styles)
     end
 end
 
-set_text!(tm::TextModifier, s::String) = tm.raw = replace(s, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ")
+set_text!(tm::TextModifier, s::String) = tm.raw = rep_in(s)
+
+rep_in(s::String) = replace(s, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ", 
+"&#40;" => "(", "&#41;" => ")", "&#34;" => "\"", "&#60;" => "<", "&#62;" => ">", 
+"&#36;" => "\$", "&lt;" => "<", "&gt;" => ">")
 
 clear!(tm::TextStyleModifier) = begin
     tm.marks = Dict{UnitRange{Int64}, Symbol}()
