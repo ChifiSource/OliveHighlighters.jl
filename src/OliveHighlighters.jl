@@ -408,6 +408,42 @@ function julia_block!(tm::TextStyleModifier)
     highlight_julia!(tm)
 end
 
+function mark_markdown!(tm::OliveHighlighters.TextModifier)
+    OliveHighlighters.mark_after!(tm, "# ", until = ["\n"], :heading)
+    OliveHighlighters.mark_between!(tm, "[", "]", :keys)
+    OliveHighlighters.mark_between!(tm, "(", ")", :link)
+    OliveHighlighters.mark_between!(tm, "**", :bold)
+    OliveHighlighters.mark_between!(tm, "*", :italic)
+    OliveHighlighters.mark_between!(tm, "``", :code)
+end
+
+function markdown_style!(tm::OliveHighlighters.TextStyleModifier)
+    style!(tm, :link, ["color" => "#D67229"])
+    style!(tm, :heading, ["color" => "purple"])
+    style!(tm, :point, ["color" => "darkgreen"])
+    style!(tm, :bold, ["color" => "darkblue"])
+    style!(tm, :italic, ["color" => "#8b0000"])
+    style!(tm, :keys, ["color" => "#ffc00"])
+    style!(tm, :code, ["color" => "#8b0000"])
+    style!(tm, :default, ["color" => "brown"])
+    style!(tm, :link, ["color" => "#8b0000"])
+end
+
+function mark_toml!(tm::OliveHighlighters.TextModifier)
+    OliveHighlighters.mark_between!(tm, "[", "]", :keys)
+    OliveHighlighters.mark_between!(tm, "\"", :string)
+    OliveHighlighters.mark_all!(tm, "=", :equals)
+    [OliveHighlighters.mark_all!(tm, string(dig), :number) for dig in digits(1234567890)]
+end
+
+function toml_style!(tm::OliveHighlighters.TextStyleModifier)
+    style!(tm, :keys, ["color" => "#D67229"])
+    style!(tm, :equals, ["color" => "purple"])
+    style!(tm, :string, ["color" => "#007958"])
+    style!(tm, :default, ["color" => "darkblue"])
+    style!(tm, :number, ["color" => "#8b0000"])
+end
+
 function string(tm::TextStyleModifier)
     if length(tm.marks) == 0
         txt = a("modiftxt", text = rep_str(tm.raw))
