@@ -137,14 +137,12 @@ function mark_between!(tm::TextModifier, s::String, label::Symbol)
     positions::Vector{UnitRange{Int64}} = findall(s, tm.raw)
     discounted::Vector{UnitRange{Int64}} = Vector{Int64}()
     [begin
-        if ~(pos in discounted)
-            nd = findnext(s, tm.raw, maximum(pos) + length(s))
-            if isnothing(nd)
-                push!(tm, pos[1]:length(tm.raw) => label)
-            else
-                push!(discounted, nd)
-                push!(tm, minimum(pos):maximum(nd) => label)
-            end
+        nd = findnext(s, tm.raw, maximum(pos) + 1)
+        if isnothing(nd)
+            push!(tm, pos[1]:length(tm.raw) => label)
+        else
+            push!(discounted, nd)
+            push!(tm, minimum(pos):minimum(nd) => label)
         end
     end for pos in positions]
     nothing
@@ -448,43 +446,54 @@ function string(tm::TextStyleModifier)
     if length(tm.marks) == 0
         txt = a("modiftxt", text = rep_str(tm.raw))
         style!(txt, tm.styles[:default] ...)
-        sting(txt)::String
+        string(txt)::String
     end
-    prev::Int64 = 1
-    finales::Vector{AbstractComponent} = Vector{AbstractComponent}()
     sortedmarks = sort(collect(tm.marks), by=x->x[1])
-    lastmax::Int64 = length(tm.raw)
-    loop_len::Int64 = length(keys(tm.marks))
-    [begin
-        if length(mark) > 0
-            mname = tm.marks[mark]
-            if minimum(mark) - prev > 0
-                txt = span("modiftxt", text = rep_str(tm.raw[prev:minimum(mark) - 1]))
-                style!(txt, tm.styles[:default] ...)
-                push!(finales, txt)
-            end
-            txt = span("modiftxt", text = rep_str(tm.raw[mark]))
-            if mname in keys(tm.styles)
-                style!(txt, tm.styles[mname] ...)   
-            else
-                style!(txt, tm.styles[:default] ...)
-            end
-            push!(finales, txt)
-            prev = maximum(mark) + 1
-        end
-        if e == loop_len
-            lastmax = maximum(mark)
-        end
-    end for (e, mark) in enumerate((k[1] for k in sortedmarks))]
-    if lastmax != length(tm.raw)
-        txt = span("modiftxt", text = rep_str(tm.raw[lastmax + 1:length(tm.raw)]))
-        style!(txt, tm.styles[:default] ...)
-        push!(finales, txt)
+    n::Int64 = length(sortedmarks)
+    at_mark::Int64 = 1
+    output::String = ""
+    mark_start = minimum(sortedmarks[1][1])
+    if mark_start > 1
+        output = tm.raw[1: mark_start - 1]
     end
-    string(finales)::String
+    while true
+        mark = sortedmarks[at_mark][1]
+        if at_mark != 1
+            last_mark = sortedmarks[at_mark - 1][1]
+            lastmax = maximum(last_mark)
+            if minimum(mark) - lastmax > 0
+                txt = span("modiftxt", text = rep_str(tm.raw[lastmax + 1:minimum(mark) - 1]))
+                style!(txt, tm.styles[:default] ...)
+                output = output * string(txt)
+            end
+        end
+        styname = sortedmarks[at_mark][2]
+        try
+            txt = span("modiftxt", text = rep_str(tm.raw[mark]))
+        catch e
+            Base.showerror(stdout, e)
+            @warn "error with text: " * tm.raw
+            @warn "positions: $mark"
+            @warn "mark: $styname"
+        end
+        if styname in keys(tm.styles)
+            style!(txt, tm.styles[styname] ...)   
+        else
+            style!(txt, tm.styles[:default] ...)
+        end
+        output = output * string(txt)
+        if at_mark == n
+            txt = span("modiftxt", text = rep_str(tm.raw[maximum(mark):length(tm.raw)]))
+            style!(txt, tm.styles[:default] ...)
+            output = output * string(txt)
+            break
+        end
+        at_mark += 1
+    end
+    return output
 end
 
 rep_str(s::String) = replace(s, " "  => "&nbsp;",
-"\n"  =>  "<br>", "\\" => "&bsol;")
+"\n"  =>  "<br>", "\\" => "&bsol;", "&#61;" => "=")
 
 end # module OliveHighlighters
