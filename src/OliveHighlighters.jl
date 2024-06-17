@@ -454,7 +454,9 @@ function string(tm::TextStyleModifier)
     output::String = ""
     mark_start = minimum(sortedmarks[1][1])
     if mark_start > 1
-        output = tm.raw[1: mark_start - 1]
+        txt = span("modiftxt", text = rep_str(tm.raw[1: mark_start - 1]))
+        style!(txt, tm.styles[:default] ...)
+        output = string(txt)
     end
     while true
         mark = sortedmarks[at_mark][1]
@@ -483,9 +485,11 @@ function string(tm::TextStyleModifier)
         end
         output = output * string(txt)
         if at_mark == n
-            txt = span("modiftxt", text = rep_str(tm.raw[maximum(mark):length(tm.raw)]))
-            style!(txt, tm.styles[:default] ...)
-            output = output * string(txt)
+            if maximum(mark) != length(tm.raw)
+                txt = span("modiftxt", text = rep_str(tm.raw[maximum(mark) + 1:length(tm.raw)]))
+                style!(txt, tm.styles[:default] ...)
+                output = output * string(txt)
+            end
             break
         end
         at_mark += 1
