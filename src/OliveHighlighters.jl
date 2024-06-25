@@ -107,7 +107,7 @@ function mark_all!(tm::TextModifier, s::String, label::Symbol)::Nothing
                 push!(tm, v => label)
             end
         else
-            if tm.raw[v[1] - 1] in repeat_offenders && tm.raw[maximum(v) + 1] in repeat_offenders
+            if tm.raw[v[1] - 1] in repeat_offenders && tm.raw[maximum(v)] in repeat_offenders
                 push!(tm, v => label)
             end
         end
@@ -443,13 +443,14 @@ function toml_style!(tm::OliveHighlighters.TextStyleModifier)
 end
 
 function string(tm::TextStyleModifier)
-    if length(tm.marks) == 0
-        txt = a("modiftxt", text = rep_str(tm.raw))
-        style!(txt, tm.styles[:default] ...)
-        string(txt)::String
-    end
+    filter!(mark -> ~(length(mark[1]) < 1), tm.marks)
     sortedmarks = sort(collect(tm.marks), by=x->x[1])
     n::Int64 = length(sortedmarks)
+    if n == 0
+        txt = a("modiftxt", text = rep_str(tm.raw))
+        style!(txt, tm.styles[:default] ...)
+        return(string(txt))::String
+    end
     at_mark::Int64 = 1
     output::String = ""
     mark_start = minimum(sortedmarks[1][1])
