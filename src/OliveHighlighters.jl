@@ -107,7 +107,7 @@ function mark_all!(tm::TextModifier, s::String, label::Symbol)::Nothing
                 push!(tm, v => label)
             end
         else
-            if tm.raw[v[1] - 1] in repeat_offenders && tm.raw[maximum(v)] in repeat_offenders
+            if tm.raw[v[1] - 1] in repeat_offenders && tm.raw[maximum(v) + 1] in repeat_offenders
                 push!(tm, v => label)
             end
         end
@@ -151,7 +151,7 @@ end
 function mark_between!(tm::TextModifier, s::String, s2::String, label::Symbol)
     positions::Vector{UnitRange{Int64}} = findall(s, tm.raw)
     [begin
-        nd = findnext(s2, tm.raw, maximum(pos) + length(s))
+        nd = findnext(s2, tm.raw, maximum(pos) + 1)
         if isnothing(nd)
             push!(tm, pos[1]:length(tm.raw) => label)
         else
@@ -256,8 +256,59 @@ marks before a given string until hitting any value in `until`.
 ```
 """
 function mark_inside!(f::Function, tm::TextModifier, label::Symbol)
+    only_these_marks = filter(mark -> mark[2] == label, tm.marks)
+    for key in keys(only_these_marks)
+        # Create a new TextModifier for the subrange and apply the function
+        new_tm = TextStyleModifier(tm.raw[key])
+        f(new_tm)
 
+        # Prepare to adjust marks
+        base_pos = minimum(key)
+        lendiff = base_pos - 1
+        new_marks = Dict(
+            (minimum(range) + lendiff):(maximum(range) + lendiff) => lbl
+            for (range, lbl) in new_tm.marks
+        )
+        sortedmarks = sort(collect(new_marks), by=x -> x[1])
+
+        # Initialize variables for processing
+        final_marks = Vector{Pair{UnitRange{Int64}, Symbol}}()
+        at_mark = 1
+        n = length(sortedmarks)
+        kmax = maximum(key)
+
+        # Process the marks and avoid duplicates
+        while true
+            if at_mark > n || n == 0
+                # Push remaining range up to kmax, if any
+                if base_pos <= kmax
+                    push!(final_marks, base_pos:kmax => label)
+                end
+                break
+            end
+
+            this_mark = sortedmarks[at_mark]
+            new_min = minimum(this_mark[1])
+
+            # Add range from base_pos to the start of this_mark, if non-empty
+            if base_pos < new_min
+                push!(final_marks, base_pos:(new_min - 1) => label)
+            end
+
+            # Add the current mark and update base_pos to its end
+            push!(final_marks, this_mark[1] => this_mark[2])
+            base_pos = maximum(this_mark[1]) + 1
+
+            at_mark += 1
+        end
+
+        # Replace the marks for the current key with updated ranges
+        delete!(tm.marks, key)
+        push!(tm.marks, final_marks...)
+    end
 end
+
+
 
 """
 **Toolips Markdown**
@@ -315,14 +366,20 @@ Marks julia syntax.
 mark_julia!(tm::TextModifier) = begin
     tm.raw = replace(tm.raw, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ")
     # delim
+    mark_between!(tm, "#=", "=#", :comment)
     mark_line_after!(tm, "#", :comment)
+    mark_between!(tm, "\"", :string)
+    mark_inside!(tm, :string) do tm2
+        println("working mark after now!")
+        mark_after!(tm2, "\$", :interp)
+        mark_after!(tm2, "\\", :exit)
+    end
     mark_before!(tm, "(", :funcn, until = [" ", "\n", ",", ".", "\"", "&nbsp;",
     "<br>", "("])
     mark_after!(tm, "::", :type, until = [" ", ",", ")", "\n", "<br>", "&nbsp;", "&nbsp;",
     ";"])
     mark_after!(tm, "@", :type, until = [" ", ",", ")", "\n", "<br>", "&nbsp;", "&nbsp;",
     ";"])
-    mark_between!(tm, "\"", :string)
     mark_between!(tm, "'", :char)
     # keywords
     mark_all!(tm, "function", :func)
@@ -386,9 +443,10 @@ highlight_julia!(tm::TextStyleModifier) = begin
     style!(tm, :number, ["color" => "#8b0000"])
     style!(tm, :char, ["color" => "#8b0000"])
     style!(tm, :type, ["color" => "#D67229"])
-    style!(tm, :exit, ["color" => "#006C67"])
+    style!(tm, :exit, ["color" => "#cc0099"])
     style!(tm, :op, ["color" => "#0C023E"])
     style!(tm, :comment, ["color" => "#808080"])
+    style!(tm, :interp, ["color" => "darkred"])
 end
 
 """
