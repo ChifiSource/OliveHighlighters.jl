@@ -1,6 +1,7 @@
 module OliveHighlighters
 using ToolipsServables
-import ToolipsServables: Modifier, String, AbstractComponent, set_text!, push!, style!, string
+import ToolipsServables: Modifier, String, AbstractComponent, set_text!, push!, style!, string, set_text!
+
 """
 ### abstract type TextModifier <: Toolips.Modifier
 TextModifiers are modifiers that change outgoing text into different forms,
@@ -14,19 +15,51 @@ blocks, or just handle these things on their own.
 abstract type TextModifier <: Modifier end
 
 """
-### TextStyleModifier
+```julia
+TextStyleModifier <: TextModifier
+```
 - raw**::String**
+- taken**::Vector{Int64}**
 - marks**::Dict{UnitRange{Int64}, Symbol}**
 - styles**::Dict{Symbol, Vector{Pair{String, String}}}**
 
-This type is provided
+The `TextStyleModifier` is used to lex text and change its style. This `Modifier` is passed through a mutating function, for example 
+`mark_all!`. `mark_all!` will mark all of the positions with the symbols we provide, then we use `style!(tm, pairs ...)` to style 
+those marks. `OliveHighlighters` also provides some pre-built highlighters:
+- `mark_toml!`
+- `toml_style!`
+- `mark_markdown!`
+- `markdown_style!`
+- `highlight_julia!`
+- `mark_julia!`
+- `julia_block!` < combines highlight and mark for Julia.
+The `TextStyleModifier`'s marks are cleared with `clear!`, but are also removed when the
+text is set with `set_text!`. To get the final result, simply call 
+`string` on the `TextStyleModifier`.
 ##### example
 ```
+using OliveHighlighters
 
+tm = TextStyleModifier("function example(x::Any = 5) end")
+
+OliveHighlighters.julia_block!(tm)
+
+style!(tm, :default, "color" => "#333333")
+
+display("text/html", string(tm))
+
+# reloading
+set_text!(tm, "function sample end")
+
+OliveHighlighters.mark_julia!(tm)
+
+OliveHighlighters.mark_all(tm, "sample", :sample)
+style!(tm, :sample, "color" => "red")
+display("text/html", string(tm))
 ```
 ------------------
 ##### constructors
-- TextStyleModifier(::String)
+- TextStyleModifier(::String = "")
 """
 mutable struct TextStyleModifier <: TextModifier
     raw::String
@@ -41,7 +74,10 @@ mutable struct TextStyleModifier <: TextModifier
     end
 end
 
-set_text!(tm::TextModifier, s::String) = tm.raw = rep_in(s)
+set_text!(tm::TextModifier, s::String) = begin 
+    tm.raw = rep_in(s)
+    clear!(tm)
+end
 
 rep_in(s::String) = replace(s, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ", 
 "&#40;" => "(", "&#41;" => ")", "&#34;" => "\"", "&#60;" => "<", "&#62;" => ">", 
@@ -369,9 +405,12 @@ mark_julia!(tm::TextModifier) = begin
     mark_between!(tm, "#=", "=#", :comment)
     mark_line_after!(tm, "#", :comment)
     mark_between!(tm, "\"", :string)
-    mark_inside!(tm, :string) do tm2
-        println("working mark after now!")
+    mark_inside!(tm, :string) do tm2::TextStyleModifier
+        mark_between!(tm2, "\$(", ")", :interp)
         mark_after!(tm2, "\$", :interp)
+        mark_inside!(tm2, :interp) do tm3
+            julia_block!(tm3)
+        end
         mark_after!(tm2, "\\", :exit)
     end
     mark_before!(tm, "(", :funcn, until = [" ", "\n", ",", ".", "\"", "&nbsp;",
