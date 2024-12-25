@@ -33,9 +33,11 @@ those marks. `OliveHighlighters` also provides some pre-built highlighters:
 - `highlight_julia!`
 - `mark_julia!`
 - `julia_block!` < combines highlight and mark for Julia.
+
 The `TextStyleModifier`'s marks are cleared with `clear!`, but are also removed when the
 text is set with `set_text!`. To get the final result, simply call 
-`string` on the `TextStyleModifier`.
+`string` on the `TextStyleModifier`. Note that it does not need to be re-styled, we can clear the styles 
+with `clear_styles!`.
 ##### example
 ```
 using OliveHighlighters
@@ -74,9 +76,49 @@ mutable struct TextStyleModifier <: TextModifier
     end
 end
 
+"""
+```julia
+set_text!(tm::TextModifier, s::String) -> ::Nothing
+```
+The `set_text!` will set the text of a `TextStyleModifier` and clear all of the modifier's marks.  
+Note this will not clear styles, so from here you would only re-mark to highlight the same thing again.
+---
+```example
+using OliveHighlighters
+
+tm = TextStyleModifier("[sample]\nx = 5")
+
+OliveHighlighters.mark_toml!(tm)
+
+OliveHighlighters.toml_style!(tm)
+
+display("text/html", string(tm))
+
+# reloading
+set_text!(tm, "[key1]\\n[key1.key2]\\nEIN = 5000")
+
+OliveHighlighters.mark_toml!(tm)
+```
+"""
 set_text!(tm::TextModifier, s::String) = begin 
     tm.raw = rep_in(s)
     clear!(tm)
+    nothing::Nothing
+end
+
+"""
+```julia
+set_text!(tm::TextModifier, s::String) -> ::Nothing
+```
+
+---
+```example
+
+```
+"""
+function clear_styles!(tm::TextStyleModifier)
+    tm.styles = Dict{Symbol, Vector{Pair{String, String}}}()
+    nothing::Nothing
 end
 
 rep_in(s::String) = replace(s, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ", 
