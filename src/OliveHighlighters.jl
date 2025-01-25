@@ -15,21 +15,29 @@ putting it through a filter where certain special characters are represented wit
 This function replaces those with normal Unicode or ASCII characters.
 ```julia
 ```
-- See also: 
+- See also: `rep_str`, `TextStyleModifier`, `TextModifier`,
 """
 rep_in(s::String) = replace(s, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ", 
 "&#40;" => "(", "&#41;" => ")", "&#34;" => "\"", "&#60;" => "<", "&#62;" => ">", 
 "&#36;" => "\$", "&lt;" => "<", "&gt;" => ">")
 
+rep_str(s::String) = replace(s, " "  => "&nbsp;",
+"\n"  =>  "<br>", "\\" => "&bsol;", "&#61;" => "=")
+
 """
-### abstract type TextModifier <: Toolips.Modifier
+```julia
+abstract TextModifier <: ToolipsServables.Modifier
+```
 TextModifiers are modifiers that change outgoing text into different forms,
 whether this be in servables or web-formatted strings. These are unique in that
 they can be provided to `itmd` (`0.1.3`+) in order to create interpolated tmd
 blocks, or just handle these things on their own.
-##### Consistencies
-- raw**::String**
-- marks**::Dict{UnitRange{Int64}, Symbol}**
+```julia
+# consistencies
+raw::String
+marks::Dict{UnitRange{Int64}, Symbol}
+```
+- See also: `TextStyleModifier`, `mark_all!`, `julia_block!`
 """
 abstract type TextModifier <: Modifier end
 
@@ -349,10 +357,12 @@ end
 mark_inside!(f::Function, tm::TextModifier, label::Symbol) -> ::Nothing
 ```
 For every occurance of `label`, we will open `f` and pass a new `TextStyleModifier` through it. 
+This will highlight the inside of the label. In the Julia example, this is used to highlight 
+the inside of string interpolators.
 The new `TextStyleModifier` will be passed the styles from the provided `TextStyleModifier`.
 ```julia
 ```
-- See also: 
+- See also: mark_after!, clear!, `mark_for!`, `string(::TextStyleModifier)`, `julia_block!`
 """
 function mark_inside!(f::Function, tm::TextModifier, label::Symbol)
     only_these_marks = filter(mark -> mark[2] == label, tm.marks)
@@ -412,14 +422,13 @@ end
 
 
 """
-**Toolips Markdown**
-### mark_for!(tm::TextModifier, s::String, f::Int64, label::Symbol)
-------------------
-Marks a certain number of characters after a given value.
-#### example
+```julia
+mark_for!(tm::TextModifier, ch::String, f::Int64, label::Symbol) -> ::Nothing
 ```
-
+Marks beyond the characters `ch` for `f` bytes as `label`.
+```julia
 ```
+- See also: `mark_line_after!`, 
 """
 function mark_for!(tm::TextModifier, ch::String, f::Int64, label::Symbol)
     if length(tm.raw) == 1
@@ -432,27 +441,11 @@ function mark_for!(tm::TextModifier, ch::String, f::Int64, label::Symbol)
         push!(tm.marks, minimum(pos):maximum(pos) + f => label)
     end
     end for pos in chars]
+    nothing::Nothing
 end
 
 
 mark_line_after!(tm::TextModifier, ch::String, label::Symbol) = mark_between!(tm, ch, "\n", label)
-
-function mark_line_startswith!(tm::TextModifier, ch::String, label::Symbol)
-    marks = findall("\n$ch", tm.raw)
-    [push!(tm.marks, mark[2]:findnext("\n", mark[2], tm.raw) => label) for mark in marks]
-end
-
-"""
-**Toolips Markdown**
-### clear_marks!(tm::TextModifier)
-------------------
-Clears all marks in text modifier.
-#### example
-```
-
-```
-"""
-clear_marks!(tm::TextModifier) = tm.marks = Dict{UnitRange{Int64}, Symbol}()
 
 """
 **Toolips Markdown**
@@ -466,9 +459,10 @@ Marks julia syntax.
 """
 mark_julia!(tm::TextModifier) = begin
     tm.raw = replace(tm.raw, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ")
-    # delim
+    # comments
     mark_between!(tm, "#=", "=#", :comment)
     mark_line_after!(tm, "#", :comment)
+    # strings + string interpolation
     mark_between!(tm, "\"", :string)
     mark_inside!(tm, :string) do tm2::TextStyleModifier
         mark_between!(tm2, "\$(", ")", :interp)
@@ -479,10 +473,13 @@ mark_julia!(tm::TextModifier) = begin
         end
         mark_after!(tm2, "\\", :exit)
     end
+    # functions
     mark_before!(tm, "(", :funcn, until = [" ", "\n", ",", ".", "\"", "&nbsp;",
     "<br>", "("])
+    # type annotations
     mark_after!(tm, "::", :type, until = [" ", ",", ")", "\n", "<br>", "&nbsp;", "&nbsp;",
     ";"])
+    # macros
     mark_after!(tm, "@", :type, until = [" ", ",", ")", "\n", "<br>", "&nbsp;", "&nbsp;",
     ";"])
     mark_between!(tm, "'", :char)
@@ -514,9 +511,6 @@ mark_julia!(tm::TextModifier) = begin
     [mark_all!(tm, string(op), :op) for op in split(
     """<: = == < > => -> || -= += + / * - ~ <= >= &&""", " ")]
     mark_between!(tm, "#=", "=#", :comment)
-#=    mark_inside!(tm, :string) do tm2
-        mark_for!(tm2, "\\", 1, :exit)
-    end =#
 end
 
 """
@@ -661,7 +655,6 @@ function string(tm::TextStyleModifier)
     return output
 end
 
-rep_str(s::String) = replace(s, " "  => "&nbsp;",
-"\n"  =>  "<br>", "\\" => "&bsol;", "&#61;" => "=")
 
+export TextStyleModifier, clear!, set_text!
 end # module OliveHighlighters
