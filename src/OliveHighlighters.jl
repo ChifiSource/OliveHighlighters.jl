@@ -2,6 +2,25 @@ module OliveHighlighters
 using ToolipsServables
 import ToolipsServables: Modifier, String, AbstractComponent, set_text!, push!, style!, string, set_text!
 
+const repeat_offenders = ('\n', ' ', ',', '(', ')', ';', '\"', ']', '[')
+
+"""
+```julia
+# (internal)
+rep_in(s::String) -> ::String
+```
+`rep_in` is an internal `OliveHighlighters` function that is used to replace client-side 
+character sequences with their Julia counter-parts. HTML DOMs will optimize the text by 
+putting it through a filter where certain special characters are represented with character codes. 
+This function replaces those with normal Unicode or ASCII characters.
+```julia
+```
+- See also: 
+"""
+rep_in(s::String) = replace(s, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ", 
+"&#40;" => "(", "&#41;" => ")", "&#34;" => "\"", "&#60;" => "<", "&#62;" => ">", 
+"&#36;" => "\$", "&lt;" => "<", "&gt;" => ">")
+
 """
 ### abstract type TextModifier <: Toolips.Modifier
 TextModifiers are modifiers that change outgoing text into different forms,
@@ -33,13 +52,14 @@ those marks. `OliveHighlighters` also provides some pre-built highlighters:
 - `highlight_julia!`
 - `mark_julia!`
 - `julia_block!` < combines highlight and mark for Julia.
-
 The `TextStyleModifier`'s marks are cleared with `clear!`, but are also removed when the
 text is set with `set_text!`. To get the final result, simply call 
-`string` on the `TextStyleModifier`. Note that it does not need to be re-styled, we can clear the styles 
-with `clear_styles!`.
-##### example
+`string` on the `TextStyleModifier`.
+```julia
+TextStyleModifier(::String = "")
 ```
+example
+```julia
 using OliveHighlighters
 
 tm = TextStyleModifier("function example(x::Any = 5) end")
@@ -59,9 +79,7 @@ OliveHighlighters.mark_all(tm, "sample", :sample)
 style!(tm, :sample, "color" => "red")
 display("text/html", string(tm))
 ```
-------------------
-##### constructors
-- TextStyleModifier(::String = "")
+- See also: `list_classes`, `set_text!`, `julia_block!`, `mark_between!`
 """
 mutable struct TextStyleModifier <: TextModifier
     raw::String
@@ -78,27 +96,32 @@ end
 
 """
 ```julia
-set_text!(tm::TextModifier, s::String) -> ::Nothing
+list_classes(tm::TextStyleModifier) -> Base.Generator)
 ```
-The `set_text!` will set the text of a `TextStyleModifier` and clear all of the modifier's marks.  
-Note this will not clear styles, so from here you would only re-mark to highlight the same thing again.
----
-```example
-using OliveHighlighters
+Returns a `Tuple` generator for the classes currently styled in the `TextStyleModifier`. This 
+    is equivalent of getting the keys of the `styles` field.
+```julia
+using OliveHighlighters; TextStyleModifier, style_julia!
+tm = TextStyleModifier("")
+highlight_julia!(tm)
 
-tm = TextStyleModifier("[sample]\nx = 5")
-
-OliveHighlighters.mark_toml!(tm)
-
-OliveHighlighters.toml_style!(tm)
-
-display("text/html", string(tm))
-
-# reloading
-set_text!(tm, "[key1]\\n[key1.key2]\\nEIN = 5000")
-
-OliveHighlighters.mark_toml!(tm)
+list_classes(tm)
 ```
+- See also: `set_text!`, `TextStyleModifier`, `clear!`
+"""
+list_classes(tm::TextStyleModifier) = (key for key in keys(styles))
+
+"""
+```julia
+set_text!(tm::TextStyleModifier, s::String) -> ::String
+```
+Sets the text of a `TextStyleModifier`. This is an extra-convenient function, 
+it calls `rep_in` -- an internal function used to replace client-side characters -- and 
+sets the result as the text of `TextStyleModifier`, then it makes a call to `clear!` to clear the 
+current marks. This allows for the same highlighters with the same styles to be used with new text.
+```julia
+```
+- See also: 
 """
 set_text!(tm::TextModifier, s::String) = begin 
     tm.raw = rep_in(s)
@@ -108,26 +131,18 @@ end
 
 """
 ```julia
-set_text!(tm::TextModifier, s::String) -> ::Nothing
+clear!(tm::TextStyleModifier) -> ::Nothing
 ```
-
----
-```example
-
+`clear!` is used to remove the current set of `marks` from a `TextStyleModifier`. 
+This will allow for new marks to be loaded with a fresh call to a marking function.
+```julia
 ```
+- See also: 
 """
-function clear_styles!(tm::TextStyleModifier)
-    tm.styles = Dict{Symbol, Vector{Pair{String, String}}}()
-    nothing::Nothing
-end
-
-rep_in(s::String) = replace(s, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ", 
-"&#40;" => "(", "&#41;" => ")", "&#34;" => "\"", "&#60;" => "<", "&#62;" => ">", 
-"&#36;" => "\$", "&lt;" => "<", "&gt;" => ">")
-
 clear!(tm::TextStyleModifier) = begin
     tm.marks = Dict{UnitRange{Int64}, Symbol}()
     tm.taken = Vector{Int64}()
+    nothing::Nothing
 end
 
 function push!(tm::TextStyleModifier, p::Pair{UnitRange{Int64}, Symbol})
@@ -138,6 +153,7 @@ function push!(tm::TextStyleModifier, p::Pair{UnitRange{Int64}, Symbol})
         vecp = Vector(p[1])
         [push!(tm.taken, val) for val in p[1]]
     end
+    nothing::Nothing
 end
 
 function push!(tm::TextStyleModifier, p::Pair{Int64, Symbol})
@@ -145,34 +161,38 @@ function push!(tm::TextStyleModifier, p::Pair{Int64, Symbol})
         push!(tm.marks, p[1]:p[1] => p[2])
         push!(tm.taken, p[1])
     end
-end
-"""
-**Toolips Markdown**
-### style!(tm::TextStyleModifier, marks::Symbol, sty::Vector{Pair{String, String}})
-------------------
-Styles marks assigned with symbol `marks` to `sty`.
-#### example
-```
-
-```
-"""
-function style!(tm::TextStyleModifier, marks::Symbol, sty::Vector{Pair{String, String}})
-    push!(tm.styles, marks => sty)
+    nothing::Nothing
 end
 
-repeat_offenders = ['\n', ' ', ',', '(', ')', ';', '\"', ']', '[']
+"""
+```julia
+style!(tm::TextStyleModifier, marks::Symbol, sty::Pair{String, String} ...) -> ::Nothing
+style!(tm::TextStyleModifier, marks::Symbol, sty::Vector{Pair{String, String}}) -> ::Nothing
+```
+Sets the style for a particular class on a `TextStyleModifier` to `sty`.
+```julia
+```
+- See also: 
+"""
+function style!(tm::TextStyleModifier, marks::Symbol, sty::Pair{String, String} ...)
+    style!(tm, marks, [sty ...])
+end
+
+style!(tm::TextStyleModifier, marks::Symbol, sty::Vector{Pair{String, String}}) = push!(tm.styles, marks => sty)
+
 
 """
-**Toolips Markdown**
-### mark_all!(tm::TextModifier, s::String, label::Symbol)
-------------------
-Marks all instances of `s` in `tm.raw` as `label`.
-#### example
+```julia
+mark_all!(tm::TextModifier, ...) -> ::Nothing
 ```
-
+`mark_all!` marks every instance of a certain sequence in `tm.raw` with the style provided in `label`.
+```julia
+mark_all!(tm::TextModifier, s::String, label::Symbol) -> ::Nothing
+mark_all!(tm::TextModifier, c::Char, label::Symbol) -> ::Nothing
 ```
+- See also: 
 """
-function mark_all!(tm::TextModifier, s::String, label::Symbol)::Nothing
+function mark_all!(tm::TextModifier, s::String, label::Symbol)
     [begin
         if maximum(v) == length(tm.raw) && minimum(v) == 1
             push!(tm, v => label)
@@ -190,7 +210,7 @@ function mark_all!(tm::TextModifier, s::String, label::Symbol)::Nothing
             end
         end
      end for v in findall(s, tm.raw)]
-    nothing
+    nothing::Nothing
 end
 
 
@@ -198,6 +218,7 @@ function mark_all!(tm::TextModifier, c::Char, label::Symbol)
     [begin
         push!(tm, v => label)
     end for v in findall(c, tm.raw)]
+    nothing::Nothing
 end
 
 """
@@ -527,7 +548,7 @@ highlight_julia!(tm::TextStyleModifier) = begin
     style!(tm, :exit, ["color" => "#cc0099"])
     style!(tm, :op, ["color" => "#0C023E"])
     style!(tm, :comment, ["color" => "#808080"])
-    style!(tm, :interp, ["color" => "darkred"])
+    style!(tm, :interp, ["color" => "#420000"])
 end
 
 """
