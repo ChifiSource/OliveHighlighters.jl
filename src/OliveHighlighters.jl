@@ -187,7 +187,9 @@ mark_all!(tm::TextModifier, ...) -> ::Nothing
 ```
 `mark_all!` marks every instance of a certain sequence in `tm.raw` with the style provided in `label`.
 ```julia
+# mark all (`String`)
 mark_all!(tm::TextModifier, s::String, label::Symbol) -> ::Nothing
+# mark all (`Char`)
 mark_all!(tm::TextModifier, c::Char, label::Symbol) -> ::Nothing
 ```
 - See also: 
@@ -222,15 +224,17 @@ function mark_all!(tm::TextModifier, c::Char, label::Symbol)
 end
 
 """
-**Toolips Markdown**
-### mark_between!(tm::TextModifier, s::String, label::Symbol; exclude::String = "\\"", excludedim::Int64 = 2)
-------------------
-Marks between each delimeter, unique in that this is done with by dividing the
-count by two.
-#### example
+```julia
+mark_between!(tm::TextModifier, s::String, ...) -> ::Nothing
 ```
-
+`mark_between!` marks between the provided `String` or `String`s.
+```julia
+# mark between duplicates of the same character:
+mark_between!(tm::TextModifier, s::String, label::Symbol)
+# mark between two different characters
+mark_between!(tm::TextModifier, s::String, s2::String, label::Symbol)
 ```
+- See also: `TextStyleModifier`, `mark_all!`, `julia_block!`, `clear!`
 """
 function mark_between!(tm::TextModifier, s::String, label::Symbol)
     positions::Vector{UnitRange{Int64}} = findall(s, tm.raw)
@@ -244,7 +248,7 @@ function mark_between!(tm::TextModifier, s::String, label::Symbol)
             push!(tm, minimum(pos):minimum(nd) => label)
         end
     end for pos in positions]
-    nothing
+    nothing::Nothing
 end
 
 function mark_between!(tm::TextModifier, s::String, s2::String, label::Symbol)
@@ -257,22 +261,20 @@ function mark_between!(tm::TextModifier, s::String, s2::String, label::Symbol)
             push!(tm, minimum(pos):maximum(nd) => label)
         end
     end for pos in positions]
-    nothing
+    nothing::Nothing
 end
 
 
 """
-**Toolips Markdown**
 ```julia
-mark_before!(tm::TextModifier, s::String, label::Symbol; until::Vector{String},
-includedims_l::Int64 = 0, includedims_r::Int64 = 0)
+mark_before!(tm::TextModifier, s::String, label::Symbol; until::Vector{String} = Vector{String}(), includedims_l::Int64 = 0, 
+includedims_r::Int64 = 0) -> ::Nothing
 ```
-------------------
-marks before a given string until hitting any value in `until`.
-#### example
+`mark_before` will mark the values before a label -- a good example of this is a `Function`, we would `mark_before` the parenthesis, 
+`until` a space or new line.
+```julia
 ```
-
-```
+- See also: `TextStyleModifier`, `mark_between!`, `mark_all!`, `clear!`, `set_text!`
 """
 function mark_before!(tm::TextModifier, s::String, label::Symbol;
     until::Vector{String} = Vector{String}(), includedims_l::Int64 = 0,
@@ -299,20 +301,19 @@ function mark_before!(tm::TextModifier, s::String, label::Symbol;
         pos = previous - includedims_l:maximum(labelrange) - 1 + includedims_r
         push!(tm, pos => label)
     end
+    nothing::Nothing
 end
 
 """
-**Toolips Markdown**
 ```julia
-mark_after!(tm::TextModifier, s::String, label::Symbol; until::Vector{String},
-includedims_l::Int64 = 0, includedims_r::Int64 = 0)
+mark_before!(tm::TextModifier, s::String, label::Symbol; until::Vector{String} = Vector{String}(), includedims_l::Int64 = 0, 
+includedims_r::Int64 = 0) -> ::Nothing
 ```
-------------------
-marks after a given string until hitting any value in `until`.
-#### example
+Marks after `s` for every occurance of `s` in tm.raw. For example, for type annotations we could mark after `::` until 
+    space or `\\n`.
+```julia
 ```
-
-```
+- See also: `TextStyleModifier`, `mark_between!`, `mark_all!`, `clear!`, `set_text!`
 """
 function mark_after!(tm::TextModifier, s::String, label::Symbol;
     until::Vector{String} = Vector{String}(), includedims_r::Int64 = 0,
@@ -340,25 +341,25 @@ function mark_after!(tm::TextModifier, s::String, label::Symbol;
         push!(tm,
         pos => label)
     end
+    nothing::Nothing
 end
 
 """
-**Toolips Markdown**
 ```julia
-mark_inside!(f::Function, tm::TextModifier)
+mark_inside!(f::Function, tm::TextModifier, label::Symbol) -> ::Nothing
 ```
-------------------
-marks before a given string until hitting any value in `until`.
-#### example
+For every occurance of `label`, we will open `f` and pass a new `TextStyleModifier` through it. 
+The new `TextStyleModifier` will be passed the styles from the provided `TextStyleModifier`.
+```julia
 ```
-
-```
+- See also: 
 """
 function mark_inside!(f::Function, tm::TextModifier, label::Symbol)
     only_these_marks = filter(mark -> mark[2] == label, tm.marks)
     for key in keys(only_these_marks)
         # Create a new TextModifier for the subrange and apply the function
         new_tm = TextStyleModifier(tm.raw[key])
+        new_tm.styles = tm.styles
         f(new_tm)
 
         # Prepare to adjust marks
@@ -405,6 +406,7 @@ function mark_inside!(f::Function, tm::TextModifier, label::Symbol)
         delete!(tm.marks, key)
         push!(tm.marks, final_marks...)
     end
+    nothing::Nothing
 end
 
 
@@ -471,8 +473,9 @@ mark_julia!(tm::TextModifier) = begin
     mark_inside!(tm, :string) do tm2::TextStyleModifier
         mark_between!(tm2, "\$(", ")", :interp)
         mark_after!(tm2, "\$", :interp)
-        mark_inside!(tm2, :interp) do tm3
-            julia_block!(tm3)
+        mark_inside!(tm2, :interp) do tm3::TextStyleModifier
+            mark_julia!(tm3)
+            nothing::Nothing
         end
         mark_after!(tm2, "\\", :exit)
     end
