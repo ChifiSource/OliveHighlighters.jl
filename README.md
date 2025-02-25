@@ -1,5 +1,5 @@
 <div align="center">
-<img src="https://github.com/ChifiSource/image_dump/blob/main/olive/olivehighlighters.png" width=350></img>
+<img src="https://github.com/ChifiSource/image_dump/blob/main/olive/0.1/olivehighlighters.png" width=225></img>
 </div>
 
 ---
