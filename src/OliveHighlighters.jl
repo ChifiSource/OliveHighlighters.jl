@@ -57,7 +57,7 @@ those marks. `OliveHighlighters` also provides some pre-built highlighters:
 - `toml_style!`
 - `mark_markdown!`
 - `markdown_style!`
-- `highlight_julia!`
+- `style_julia!`
 - `mark_julia!`
 - `julia_block!` < combines highlight and mark for Julia.
 The `TextStyleModifier`'s marks are cleared with `clear!`, but are also removed when the
@@ -87,7 +87,7 @@ OliveHighlighters.mark_all(tm, "sample", :sample)
 style!(tm, :sample, "color" => "red")
 display("text/html", string(tm))
 ```
-- See also: `list_classes`, `set_text!`, `julia_block!`, `mark_between!`
+- See also: `classes`, `set_text!`, `julia_block!`, `mark_between!`
 """
 mutable struct TextStyleModifier <: TextModifier
     raw::String
@@ -102,22 +102,24 @@ mutable struct TextStyleModifier <: TextModifier
     end
 end
 
+const Highlighter = TextStyleModifier
+
 """
 ```julia
-list_classes(tm::TextStyleModifier) -> Base.Generator)
+classes(tm::TextStyleModifier) -> Base.Generator)
 ```
 Returns a `Tuple` generator for the classes currently styled in the `TextStyleModifier`. This 
     is equivalent of getting the keys of the `styles` field.
 ```julia
 using OliveHighlighters; TextStyleModifier, style_julia!
 tm = TextStyleModifier("")
-highlight_julia!(tm)
+style_julia!(tm)
 
-list_classes(tm)
+classes(tm)
 ```
 - See also: `set_text!`, `TextStyleModifier`, `clear!`
 """
-list_classes(tm::TextStyleModifier) = (key for key in keys(styles))
+classes(tm::TextStyleModifier) = (key for key in keys(tm.styles))
 
 """
 ```julia
@@ -453,7 +455,7 @@ Marks the line after a certain `String` with the `Symbol` `label` in `tm.marks`.
 mark_line_after!(tm::TextModifier, ch::String, label::Symbol) = mark_between!(tm, ch, "\n", label)
 
 OPS::Vector{SubString} = split("""<: = == < > => -> || -= += + / * - ~ <= >= &&""", " ")
-
+UNTILS::Vector{String} = [" ", ",", ")", "\n", "<br>", "&nbsp;", ";"]
 """
 ```julia
 mark_julia!(tm::TextModifier) -> ::Nothing
@@ -480,14 +482,12 @@ mark_julia!(tm::TextModifier) = begin
         mark_after!(tm2, "\\", :exit)
     end
     # functions
-    mark_before!(tm, "(", :funcn, until = [" ", "\n", ",", ".", "\"", "&nbsp;",
-    "<br>", "("])
+
+    mark_before!(tm, "(", :funcn, until = UNTILS)
     # type annotations
-    mark_after!(tm, "::", :type, until = [" ", ",", ")", "\n", "<br>", "&nbsp;", "&nbsp;",
-    ";"])
+    mark_after!(tm, "::", :type, until = UNTILS)
     # macros
-    mark_after!(tm, "@", :type, until = [" ", ",", ")", "\n", "<br>", "&nbsp;", "&nbsp;",
-    ";"])
+    mark_after!(tm, "@", :type, until = UNTILS)
     mark_between!(tm, "'", :char)
     # keywords
     mark_all!(tm, "function", :func)
@@ -525,7 +525,7 @@ end
 
 """
 ```julia
-highlight_julia!(tm::TextStyleModifier) -> ::Nothing
+style_julia!(tm::TextStyleModifier) -> ::Nothing
 ```
 Performs the styling for a Julia highlighter -- note that this only needs to be called once with 
     `set_text!`.
@@ -533,7 +533,7 @@ Performs the styling for a Julia highlighter -- note that this only needs to be 
 ```
 - See also: `mark_line_after!`, `style_julia!`, `mark_between!`, `TextStyleModifier`
 """
-highlight_julia!(tm::TextStyleModifier) = begin
+style_julia!(tm::TextStyleModifier) = begin
     style!(tm, :default, ["color" => "#3D3D3D"])
     style!(tm, :func, ["color" => "#944d94"])
     style!(tm, :funcn, ["color" => "#2d65a8"])
@@ -563,7 +563,7 @@ end
 ```julia
 julia_block!(tm::TextStyleModifier) -> ::Nothing
 ```
-Calls both `highlight_julia!` and `mark_julia!` in order to turn a loaded `TextStyleModifier` 
+Calls both `style_julia!` and `mark_julia!` in order to turn a loaded `TextStyleModifier` 
 straight into highlighted Julia.
 ```julia
 ```
@@ -571,7 +571,7 @@ straight into highlighted Julia.
 """
 function julia_block!(tm::TextStyleModifier)
     mark_julia!(tm)
-    highlight_julia!(tm)
+    style_julia!(tm)
 end
 
 """
@@ -580,6 +580,17 @@ mark_markdown!(tm::OliveHighlighters.TextModifier) -> ::Nothing
 ```
 Marks markdown highlights to `tm.marks`. `mark_julia!`, but for markdown.
 ```julia
+using OliveHighlighters
+
+md_hl = Highlighter()
+
+OliveHighlighters.style_markdown!(md_hl)
+
+set_text!(md_hl, "[key] = false")
+
+OliveHighlighters.mark_markdown!(md_hl)
+
+result::String = string(md_hl)
 ```
 - See also: `mark_line_after!`, `style_markdown!`, `mark_julia!`, `TextStyleModifier`
 """
@@ -599,6 +610,17 @@ style_markdown!(tm::OliveHighlighters.TextModifier) -> ::Nothing
 ```
 Adds markdown marking styles to `tm`.
 ```julia
+using OliveHighlighters
+
+md_hl = Highlighter()
+
+OliveHighlighters.style_markdown!(md_hl)
+
+set_text!(md_hl, "[key] = false")
+
+OliveHighlighters.mark_markdown!(md_hl)
+
+result::String = string(md_hl)
 ```
 - See also: `mark_line_after!`, `mark_markdown!`, `mark_julia!`, `TextStyleModifier`
 """
@@ -619,6 +641,17 @@ mark_toml!(tm::OliveHighlighters.TextModifier) -> ::Nothing
 ```
 Marks all of the characters to highlight inside of raw TOML loaded into `tm.raw`.
 ```julia
+using OliveHighlighters
+
+toml_hl = Highlighter()
+
+OliveHighlighters.style_toml!(toml_hl)
+
+set_text!(toml_hl, "[key] = false")
+
+OliveHighlighters.mark_toml!(toml_hl)
+
+result::String = string(toml_hl)
 ```
 - See also: `TextStyleModifier`, `style_toml!`, `clear!`, `set_text!`
 """
@@ -631,6 +664,26 @@ function mark_toml!(tm::OliveHighlighters.TextModifier)
     end
 end
 
+"""
+```julia
+style_toml!(tm::OliveHighlighters.TextStyleModifier) -> ::Nothing
+```
+Styles the default styles for a `TOML` highlighter.
+```julia
+using OliveHighlighters
+
+toml_hl = Highlighter()
+
+OliveHighlighters.style_toml!(toml_hl)
+
+set_text!(toml_hl, "[key] = false")
+
+OliveHighlighters.mark_toml!(toml_hl)
+
+result::String = string(toml_hl)
+```
+- See also: `TextStyleModifier`, `style_toml!`, `clear!`, `set_text!`
+"""
 function style_toml!(tm::OliveHighlighters.TextStyleModifier)
     style!(tm, :keys, ["color" => "#D67229"])
     style!(tm, :equals, ["color" => "#1f0c2e"])
@@ -696,5 +749,5 @@ function string(tm::TextStyleModifier)
 end
 
 
-export TextStyleModifier, clear!, set_text!
+export Highlighter, clear!, set_text!, classes
 end # module OliveHighlighters
