@@ -245,31 +245,29 @@ mark_between!(tm::TextModifier, s::String, s2::String, label::Symbol)
 - See also: `TextStyleModifier`, `mark_all!`, `julia_block!`, `clear!`
 """
 function mark_between!(tm::TextModifier, s::String, label::Symbol)
-    positions::Vector{UnitRange{Int64}} = findall(s, tm.raw)
-    discounted::Vector{UnitRange{Int64}} = Vector{Int64}()
-    [begin
-        nd = findnext(s, tm.raw, maximum(pos) + 1)
-        if isnothing(nd)
-            push!(tm, pos[1]:length(tm.raw) => label)
-        else
-            push!(discounted, nd)
-            push!(tm, minimum(pos):minimum(nd) => label)
-        end
-    end for pos in positions]
-    nothing::Nothing
+	positions::Vector{UnitRange{Int64}} = findall(s, tm.raw)
+	for pos in positions
+		nd = findnext(s, tm.raw, maximum(pos) + 1)
+		if nd !== nothing
+			push!(tm, minimum(pos):maximum(nd) => label)
+		else
+			push!(tm, minimum(pos):length(tm.raw) => label)
+		end
+	end
+	nothing
 end
 
 function mark_between!(tm::TextModifier, s::String, s2::String, label::Symbol)
-    positions::Vector{UnitRange{Int64}} = findall(s, tm.raw)
-    [begin
-        nd = findnext(s2, tm.raw, maximum(pos) + 1)
-        if isnothing(nd)
-            push!(tm, pos[1]:length(tm.raw) => label)
-        else
-            push!(tm, minimum(pos):maximum(nd) => label)
-        end
-    end for pos in positions]
-    nothing::Nothing
+	positions::Vector{UnitRange{Int64}} = findall(s, tm.raw)
+	for pos in positions
+		nd = findnext(s2, tm.raw, maximum(pos) + 1)
+		if nd !== nothing
+			push!(tm, minimum(pos):nd => label)
+		else
+			push!(tm, minimum(pos):length(tm.raw) => label)
+		end
+	end
+	nothing
 end
 
 
@@ -419,8 +417,6 @@ function mark_inside!(f::Function, tm::TextModifier, label::Symbol)
     nothing::Nothing
 end
 
-
-
 """
 ```julia
 mark_for!(tm::TextModifier, ch::String, f::Int64, label::Symbol) -> ::Nothing
@@ -445,17 +441,25 @@ function mark_for!(tm::TextModifier, ch::String, f::Int64, label::Symbol)
 end
 
 
+"""
+```julia
+mark_line_after!(tm::TextModifier, ch::String, label::Symbol) -> ::Nothing
+```
+Marks the line after a certain `String` with the `Symbol` `label` in `tm.marks`.
+```julia
+```
+- See also: `mark_line_after!`, 
+"""
 mark_line_after!(tm::TextModifier, ch::String, label::Symbol) = mark_between!(tm, ch, "\n", label)
 
 """
-**Toolips Markdown**
-### mark_julia!(tm::TextModifier)
-------------------
-Marks julia syntax.
-#### example
+```julia
+mark_julia!(tm::TextModifier) -> ::Nothing
 ```
-
+Performs the marking portion of highlighting for Julia code.
+```julia
 ```
+- See also: `mark_line_after!`, 
 """
 mark_julia!(tm::TextModifier) = begin
     tm.raw = replace(tm.raw, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ")
@@ -578,7 +582,7 @@ function markdown_style!(tm::OliveHighlighters.TextStyleModifier)
     style!(tm, :point, ["color" => "darkgreen"])
     style!(tm, :bold, ["color" => "darkblue"])
     style!(tm, :italic, ["color" => "#8b0000"])
-    style!(tm, :keys, ["color" => "#ffc00"])
+    style!(tm, :keys, ["color" => "#ffc000"])
     style!(tm, :code, ["color" => "#8b0000"])
     style!(tm, :default, ["color" => "brown"])
     style!(tm, :link, ["color" => "#8b0000"])
