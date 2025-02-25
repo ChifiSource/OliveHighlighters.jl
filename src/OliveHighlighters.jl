@@ -692,12 +692,13 @@ function style_toml!(tm::OliveHighlighters.TextStyleModifier)
     style!(tm, :number, ["color" => "#8b0000"])
 end
 
-function string(tm::TextStyleModifier)
+function string(tm::TextStyleModifier; args ...)
     filter!(mark -> ~(length(mark[1]) < 1), tm.marks)
     sortedmarks = sort(collect(tm.marks), by=x->x[1])
+    custom_class::Bool = asclass != ""
     n::Int64 = length(sortedmarks)
     if n == 0
-        txt = a("modiftxt", text = rep_str(tm.raw))
+        txt = a("modiftxt", text = rep_str(tm.raw); args ...)
         style!(txt, tm.styles[:default] ...)
         return(string(txt))::String
     end
@@ -705,7 +706,7 @@ function string(tm::TextStyleModifier)
     output::String = ""
     mark_start = minimum(sortedmarks[1][1])
     if mark_start > 1
-        txt = span("modiftxt", text = rep_str(tm.raw[1: mark_start - 1]))
+        txt = span("modiftxt", text = rep_str(tm.raw[1: mark_start - 1]);  args ...)
         style!(txt, tm.styles[:default] ...)
         output = string(txt)
     end
@@ -715,14 +716,14 @@ function string(tm::TextStyleModifier)
             last_mark = sortedmarks[at_mark - 1][1]
             lastmax = maximum(last_mark)
             if minimum(mark) - lastmax > 0
-                txt = span("modiftxt", text = rep_str(tm.raw[lastmax + 1:minimum(mark) - 1]))
+                txt = span("modiftxt", text = rep_str(tm.raw[lastmax + 1:minimum(mark) - 1]); args ...)
                 style!(txt, tm.styles[:default] ...)
                 output = output * string(txt)
             end
         end
         styname = sortedmarks[at_mark][2]
         try
-            txt = span("modiftxt", text = rep_str(tm.raw[mark]))
+            txt = span("modiftxt", text = rep_str(tm.raw[mark]); args ...)
         catch e
             Base.showerror(stdout, e)
             @warn "error with text: " * tm.raw
@@ -737,7 +738,7 @@ function string(tm::TextStyleModifier)
         output = output * string(txt)
         if at_mark == n
             if maximum(mark) != length(tm.raw)
-                txt = span("modiftxt", text = rep_str(tm.raw[maximum(mark) + 1:length(tm.raw)]))
+                txt = span("modiftxt", text = rep_str(tm.raw[maximum(mark) + 1:length(tm.raw)]); args ...)
                 style!(txt, tm.styles[:default] ...)
                 output = output * string(txt)
             end
@@ -745,7 +746,7 @@ function string(tm::TextStyleModifier)
         end
         at_mark += 1
     end
-    return output
+    output::String
 end
 
 
