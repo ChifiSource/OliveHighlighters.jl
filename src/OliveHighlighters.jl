@@ -448,9 +448,11 @@ mark_line_after!(tm::TextModifier, ch::String, label::Symbol) -> ::Nothing
 Marks the line after a certain `String` with the `Symbol` `label` in `tm.marks`.
 ```julia
 ```
-- See also: `mark_line_after!`, 
+- See also: `mark_line_after!`, `mark_for!`
 """
 mark_line_after!(tm::TextModifier, ch::String, label::Symbol) = mark_between!(tm, ch, "\n", label)
+
+OPS::Vector{SubString} = split("""<: = == < > => -> || -= += + / * - ~ <= >= &&""", " ")
 
 """
 ```julia
@@ -459,7 +461,7 @@ mark_julia!(tm::TextModifier) -> ::Nothing
 Performs the marking portion of highlighting for Julia code.
 ```julia
 ```
-- See also: `mark_line_after!`, 
+- See also: `mark_line_after!`, `style_julia!`, `mark_between!`, `TextStyleModifier`
 """
 mark_julia!(tm::TextModifier) = begin
     tm.raw = replace(tm.raw, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ")
@@ -509,40 +511,44 @@ mark_julia!(tm::TextModifier) = begin
     mark_all!(tm, "begin", :begin)
     mark_all!(tm, "module", :module)
     # math
-    [mark_all!(tm, Char('0' + dig), :number) for dig in digits(1234567890)]
+    for dig in digits(1234567890)
+        mark_all!(tm, Char('0' + dig), :number)
+    end
     mark_all!(tm, "true", :number)
     mark_all!(tm, "false", :number)
-    [mark_all!(tm, string(op), :op) for op in split(
-    """<: = == < > => -> || -= += + / * - ~ <= >= &&""", " ")]
+    for op in OPS
+        mark_all!(tm, string(op), :op)
+    end
     mark_between!(tm, "#=", "=#", :comment)
+    nothing::Nothing
 end
 
 """
-**Toolips Markdown**
-### highlight_julia!(tm::TextModifier)
-------------------
-Marks default style for julia code.
-#### example
+```julia
+highlight_julia!(tm::TextStyleModifier) -> ::Nothing
 ```
-
+Performs the styling for a Julia highlighter -- note that this only needs to be called once with 
+    `set_text!`.
+```julia
 ```
+- See also: `mark_line_after!`, `style_julia!`, `mark_between!`, `TextStyleModifier`
 """
 highlight_julia!(tm::TextStyleModifier) = begin
     style!(tm, :default, ["color" => "#3D3D3D"])
-    style!(tm, :func, ["color" => "#fc038c"])
-    style!(tm, :funcn, ["color" => "#2F387B"])
+    style!(tm, :func, ["color" => "#944d94"])
+    style!(tm, :funcn, ["color" => "#2d65a8"])
     style!(tm, :using, ["color" => "#006C67"])
     style!(tm, :import, ["color" => "#fc038c"])
     style!(tm, :end, ["color" => "#b81870"])
-    style!(tm, :mutable, ["color" => "#006C67"])
-    style!(tm, :struct, ["color" => "#fc038c"])
-    style!(tm, :begin, ["color" => "#fc038c"])
+    style!(tm, :mutable, ["color" => "#a82d38"])
+    style!(tm, :struct, ["color" => "#944d94"])
+    style!(tm, :begin, ["color" => "#a82d38"])
     style!(tm, :module, ["color" => "#b81870"])
-    style!(tm, :string, ["color" => "#007958"])
-    style!(tm, :if, ["color" => "#fc038c"])
-    style!(tm, :for, ["color" => "#fc038c"])
+    style!(tm, :string, ["color" => "#4e944d"])
+    style!(tm, :if, ["color" => "#944d94"])
+    style!(tm, :for, ["color" => "#944d94"])
     style!(tm, :in, ["color" => "#006C67"])
-    style!(tm, :abstract, ["color" => "#006C67"])
+    style!(tm, :abstract, ["color" => "#a82d38"])
     style!(tm, :number, ["color" => "#8b0000"])
     style!(tm, :char, ["color" => "#8b0000"])
     style!(tm, :type, ["color" => "#D67229"])
@@ -550,23 +556,33 @@ highlight_julia!(tm::TextStyleModifier) = begin
     style!(tm, :op, ["color" => "#0C023E"])
     style!(tm, :comment, ["color" => "#808080"])
     style!(tm, :interp, ["color" => "#420000"])
+    nothing::Nothing
 end
 
 """
-**Toolips Markdown**
-### julia_block!(tm::TextModifier)
-------------------
-Marks default style for julia code.
-#### example
+```julia
+julia_block!(tm::TextStyleModifier) -> ::Nothing
 ```
-
+Calls both `highlight_julia!` and `mark_julia!` in order to turn a loaded `TextStyleModifier` 
+straight into highlighted Julia.
+```julia
 ```
+- See also: `mark_line_after!`, `style_julia!`, `mark_julia!`, `TextStyleModifier`
 """
 function julia_block!(tm::TextStyleModifier)
     mark_julia!(tm)
     highlight_julia!(tm)
 end
 
+"""
+```julia
+mark_markdown!(tm::OliveHighlighters.TextModifier) -> ::Nothing
+```
+Marks markdown highlights to `tm.marks`. `mark_julia!`, but for markdown.
+```julia
+```
+- See also: `mark_line_after!`, `style_markdown!`, `mark_julia!`, `TextStyleModifier`
+"""
 function mark_markdown!(tm::OliveHighlighters.TextModifier)
     OliveHighlighters.mark_after!(tm, "# ", until = ["\n"], :heading)
     OliveHighlighters.mark_between!(tm, "[", "]", :keys)
@@ -574,32 +590,52 @@ function mark_markdown!(tm::OliveHighlighters.TextModifier)
     OliveHighlighters.mark_between!(tm, "**", :bold)
     OliveHighlighters.mark_between!(tm, "*", :italic)
     OliveHighlighters.mark_between!(tm, "``", :code)
+    nothing::Nothing
 end
 
-function markdown_style!(tm::OliveHighlighters.TextStyleModifier)
+"""
+```julia
+style_markdown!(tm::OliveHighlighters.TextModifier) -> ::Nothing
+```
+Adds markdown marking styles to `tm`.
+```julia
+```
+- See also: `mark_line_after!`, `mark_markdown!`, `mark_julia!`, `TextStyleModifier`
+"""
+function style_markdown!(tm::OliveHighlighters.TextStyleModifier)
     style!(tm, :link, ["color" => "#D67229"])
-    style!(tm, :heading, ["color" => "purple"])
-    style!(tm, :point, ["color" => "darkgreen"])
-    style!(tm, :bold, ["color" => "darkblue"])
+    style!(tm, :heading, ["color" => "#1f0c2e"])
+    style!(tm, :bold, ["color" => "#0f1e73"])
     style!(tm, :italic, ["color" => "#8b0000"])
     style!(tm, :keys, ["color" => "#ffc000"])
     style!(tm, :code, ["color" => "#8b0000"])
-    style!(tm, :default, ["color" => "brown"])
+    style!(tm, :default, ["color" => "#1c0906"])
     style!(tm, :link, ["color" => "#8b0000"])
 end
 
+"""
+```julia
+mark_toml!(tm::OliveHighlighters.TextModifier) -> ::Nothing
+```
+Marks all of the characters to highlight inside of raw TOML loaded into `tm.raw`.
+```julia
+```
+- See also: `TextStyleModifier`, `style_toml!`, `clear!`, `set_text!`
+"""
 function mark_toml!(tm::OliveHighlighters.TextModifier)
     OliveHighlighters.mark_between!(tm, "[", "]", :keys)
     OliveHighlighters.mark_between!(tm, "\"", :string)
     OliveHighlighters.mark_all!(tm, "=", :equals)
-    [OliveHighlighters.mark_all!(tm, string(dig), :number) for dig in digits(1234567890)]
+    for dig in digits(1234567890)
+        OliveHighlighters.mark_all!(tm, string(dig), :number)
+    end
 end
 
-function toml_style!(tm::OliveHighlighters.TextStyleModifier)
+function style_toml!(tm::OliveHighlighters.TextStyleModifier)
     style!(tm, :keys, ["color" => "#D67229"])
-    style!(tm, :equals, ["color" => "purple"])
-    style!(tm, :string, ["color" => "#007958"])
-    style!(tm, :default, ["color" => "darkblue"])
+    style!(tm, :equals, ["color" => "#1f0c2e"])
+    style!(tm, :string, ["color" => "#4e944d"])
+    style!(tm, :default, ["color" => "#2d65a8"])
     style!(tm, :number, ["color" => "#8b0000"])
 end
 
