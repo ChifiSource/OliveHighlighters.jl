@@ -31,3 +31,4 @@ display("text/html", string(tm))
 
 ###### usage
 Using this package is really easy. In order to lex code, we use several different marking algorithms which store marks in a `TextStyleModifier`. The `TextStyleModifier` has special indexing that allows it to work better for this case. We set styles with the `Toolips.style!`, using symbols to mark things as we see fit. The package also provides three prebuilt highlighters for markdown, toml, and Julia.
+A full list of modifying functions is available in the `OliveHighlighters` doc-string.
