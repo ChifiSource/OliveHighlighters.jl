@@ -264,7 +264,7 @@ function mark_between!(tm::TextModifier, s::String, s2::String, label::Symbol)
 	for pos in positions
 		nd = findnext(s2, tm.raw, maximum(pos) + 1)
 		if nd !== nothing
-			push!(tm, minimum(pos):nd => label)
+			push!(tm, minimum(pos):maximum(nd) => label)
 		else
 			push!(tm, minimum(pos):length(tm.raw) => label)
 		end
@@ -695,7 +695,6 @@ end
 function string(tm::TextStyleModifier; args ...)
     filter!(mark -> ~(length(mark[1]) < 1), tm.marks)
     sortedmarks = sort(collect(tm.marks), by=x->x[1])
-    custom_class::Bool = asclass != ""
     n::Int64 = length(sortedmarks)
     if n == 0
         txt = a("modiftxt", text = rep_str(tm.raw); args ...)
@@ -704,7 +703,7 @@ function string(tm::TextStyleModifier; args ...)
     end
     at_mark::Int64 = 1
     output::String = ""
-    mark_start = minimum(sortedmarks[1][1])
+    mark_start::Int64 = minimum(sortedmarks[1][1])
     if mark_start > 1
         txt = span("modiftxt", text = rep_str(tm.raw[1: mark_start - 1]);  args ...)
         style!(txt, tm.styles[:default] ...)
