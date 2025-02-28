@@ -5,6 +5,7 @@
 `OliveHighlighters` is a [ToolipsServables](https://github.com/ChifiSource/ToolipsServables.jl)-based syntax highlighting system designed *primarily* for [Olive](https://github.com/ChifiSource/Olive.jl). The main objective of this highlighting system is to provide a clean and easy to modify stylized output for syntax in `Olive`, though it could (and has) easily be applied to other projects as well. 
 - [get started](#get-started)
   - [usage](#usage)
+- [contributing](#contributing)
 ```julia
 using using OliveHighlighters
 
