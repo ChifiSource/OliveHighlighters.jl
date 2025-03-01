@@ -1,6 +1,6 @@
 module OliveHighlighters
 using ToolipsServables
-import ToolipsServables: Modifier, String, AbstractComponent, set_text!, push!, style!, string, set_text!
+import ToolipsServables: Modifier, String, AbstractComponent, set_text!, push!, style!, string, set_text!, remove!
 
 const repeat_offenders = ('\n', ' ', ',', '(', ')', ';', '\"', ']', '[')
 
@@ -12,8 +12,9 @@ rep_in(s::String) -> ::String
 `rep_in` is an internal `OliveHighlighters` function that is used to replace client-side 
 character sequences with their Julia counter-parts. HTML DOMs will optimize the text by 
 putting it through a filter where certain special characters are represented with character codes. 
-This function replaces those with normal Unicode or ASCII characters.
+This function replaces those with normal Unicode or ASCII characters. This is done automatically by the `TextStyleModifier`.
 ```julia
+s = rep_in(s)
 ```
 - See also: `rep_str`, `TextStyleModifier`, `TextModifier`,
 """
@@ -51,8 +52,11 @@ TextStyleModifier <: TextModifier
 - styles**::Dict{Symbol, Vector{Pair{String, String}}}**
 
 The `TextStyleModifier` is used to lex text and change its style. This `Modifier` is passed through a mutating function, for example 
-`mark_all!`. `mark_all!` will mark all of the positions with the symbols we provide, then we use `style!(tm, pairs ...)` to style 
-those marks. `OliveHighlighters` also provides some pre-built highlighters:
+`mark_all!`. `mark_all!` will mark all of the positions with the symbols we provide, then we use `ToolipsServables.style!(tm, ::Symbol, pairs ...)` to style 
+those marks. These can be listed with `OliveHighlighters.classes` and removed with `ToolipsServables.remove!`. The `TextStyleModifier` is also aliased as 
+`Highlighter`, and this type is exported whereas `TextStyleModifier` is not.
+
+`OliveHighlighters` provides some pre-built highlighters:
 - `mark_toml!`
 - `toml_style!`
 - `mark_markdown!`
@@ -109,7 +113,7 @@ const Highlighter = TextStyleModifier
 classes(tm::TextStyleModifier) -> Base.Generator)
 ```
 Returns a `Tuple` generator for the classes currently styled in the `TextStyleModifier`. This 
-    is equivalent of getting the keys of the `styles` field.
+    is equivalent of getting the keys of the `styles` field. `remove!` can also be used to remove classes.
 ```julia
 using OliveHighlighters; TextStyleModifier, style_julia!
 tm = TextStyleModifier("")
@@ -121,6 +125,8 @@ classes(tm)
 """
 classes(tm::TextStyleModifier) = (key for key in keys(tm.styles))
 
+remove!(tm::TextStyleModifier, key::Symbol) = delete!(tm.styles, key)
+
 """
 ```julia
 set_text!(tm::TextStyleModifier, s::String) -> ::String
@@ -130,8 +136,21 @@ it calls `rep_in` -- an internal function used to replace client-side characters
 sets the result as the text of `TextStyleModifier`, then it makes a call to `clear!` to clear the 
 current marks. This allows for the same highlighters with the same styles to be used with new text.
 ```julia
+using OliveHighlighters
+my_tm = Highlighter("function example() end")
+
+OliveHighlighters.julia_block!(my_tm)
+
+that_code = string(my_tm)
+
+OliveHighlighters.set_text!(my_tm, "arg::Int64 = 5")
+
+# julia_block! includes highlights, because we used `set_text!` we can remark the same highlighter:
+OliveHighlighters.mark_julia!(my_tm)
+
+new_code = string(my_tm)
 ```
-- See also: 
+- See also: `clear!`, `Highlighter`, `classes`
 """
 set_text!(tm::TextModifier, s::String) = begin 
     tm.raw = rep_in(s)
@@ -144,10 +163,27 @@ end
 clear!(tm::TextStyleModifier) -> ::Nothing
 ```
 `clear!` is used to remove the current set of `marks` from a `TextStyleModifier`. 
-This will allow for new marks to be loaded with a fresh call to a marking function.
+This will allow for new marks to be loaded with a fresh call to a marking function. This 
+    function is automatically called by `set_text!`, so unless we want to clear the marks without 
+    changing the text, that would be the more convenient function to call.
 ```julia
+using OliveHighlighters
+my_tm = Highlighter("function example() end")
+
+OliveHighlighters.julia_block!(my_tm)
+
+that_code = string(my_tm)
+
+# avoiding `set_text!`
+OliveHighlighters.clear!(my_tm)
+my_tm.raw = "function sample()\\n x = 5 \\nend"
+
+# julia_block! includes highlights, because we used `set_text!` we can remark the same highlighter:
+OliveHighlighters.mark_julia!(my_tm)
+
+new_code = string(my_tm)
 ```
-- See also: 
+- See also: `set_text!`, `style!`
 """
 clear!(tm::TextStyleModifier) = begin
     tm.marks = Dict{UnitRange{Int64}, Symbol}()
@@ -179,7 +215,7 @@ end
 style!(tm::TextStyleModifier, marks::Symbol, sty::Pair{String, String} ...) -> ::Nothing
 style!(tm::TextStyleModifier, marks::Symbol, sty::Vector{Pair{String, String}}) -> ::Nothing
 ```
-Sets the style for a particular class on a `TextStyleModifier` to `sty`.
+These `style!` bindings belong to `OliveHighlighters`.These will set the style for a particular class on a `TextStyleModifier` to `sty`.
 ```julia
 ```
 - See also: 
@@ -749,5 +785,5 @@ function string(tm::TextStyleModifier; args ...)
 end
 
 
-export Highlighter, clear!, set_text!, classes
+export Highlighter, clear!, set_text!, classes, style!, remove!
 end # module OliveHighlighters
