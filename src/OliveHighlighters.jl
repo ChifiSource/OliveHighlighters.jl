@@ -738,7 +738,7 @@ mark_julia!(tm::TextModifier) = begin
     # type annotations
     mark_after!(tm, "::", :type, until = UNTILS)
     # macros
-    mark_after!(tm, "@", :type, until = UNTILS)
+    mark_after!(tm, "@", :macro, until = UNTILS)
     mark_between!(tm, "'", :char)
     # keywords
     mark_all!(tm, "function", :func)
@@ -815,6 +815,7 @@ style_julia!(tm::TextStyleModifier) = begin
     style!(tm, :type, ["color" => "#D67229"])
     style!(tm, :exit, ["color" => "#cc0099"])
     style!(tm, :op, ["color" => "#0C023E"])
+    style!(tm, :macro, ["color" => "#43B3AE"])
     style!(tm, :comment, ["color" => "#808080"])
     style!(tm, :interp, ["color" => "#420000"])
     nothing::Nothing
