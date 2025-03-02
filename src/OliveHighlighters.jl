@@ -1,3 +1,47 @@
+"""
+#### OliveHighlighters
+- Created in March, 2025 by [chifi](https://github.com/orgs/ChifiSource)
+- This software is MIT-licensed.
+
+`OliveHighlighters` is a `ToolipsServables`-based highlighting system created 
+primarily with the intention of serving the `Olive` parametric notebook 
+editor. This package explicitly provides clean, in-line stylized output and 
+declarative syntax in the hopes that this might make it easier for the future 
+language and syntax specifications to be implemeneted within `Olive`.
+Needless to say, this project turns out to also be useful in a variety of other 
+contexts.
+
+Usage revolves primarily around the `Highlighter` or `TextStyleModifier`. 
+These are loaded with styles, and then sent through marking functions to 
+create the highlighting system.
+```example
+using OliveHighlighters
+
+tm = TextStyleModifier("function example(x::Any = 5) end")
+
+OliveHighlighters.julia_block!(tm)
+
+style!(tm, :default, "color" => "#333333")
+
+display("text/html", string(tm))
+
+# reloading, the styles will be saved -- we call `mark_julia!` instead of `julia_block!`.
+set_text!(tm, "function sample end")
+
+OliveHighlighters.mark_julia!(tm)
+
+OliveHighlighters.mark_all(tm, "sample", :sample)
+
+style!(tm, :sample, "color" => "red")
+
+display("text/html", string(tm))
+```
+##### provides
+- **Base**
+- **marking functions**
+- **included highlighters**
+- **internal**
+"""
 module OliveHighlighters
 using ToolipsServables
 import ToolipsServables: Modifier, String, AbstractComponent, set_text!, push!, style!, string, set_text!, remove!
@@ -387,12 +431,36 @@ end
 
 """
 ```julia
-mark_before!(tm::TextModifier, s::String, label::Symbol; until::Vector{String} = Vector{String}(), includedims_l::Int64 = 0, 
-includedims_r::Int64 = 0) -> ::Nothing
+mark_after!(tm::TextModifier, s::String, label::Symbol;
+    until::Vector{String} = Vector{String}(), includedims_r::Int64 = 0,
+    includedims_l::Int64 = 0) -> ::Nothing
 ```
 Marks after `s` for every occurance of `s` in tm.raw. For example, for type annotations we could mark after `::` until 
     space or `\\n`.
 ```julia
+# this is the function used to mark types in the Julia highlighter, for example:
+mark_julia!(tm::TextModifier) = begin
+    tm.raw = replace(tm.raw, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ")
+    # comments
+    mark_between!(tm, "#=", "=#", :comment)
+    mark_line_after!(tm, "#", :comment)
+    # strings + string interpolation
+    mark_between!(tm, "\"", :string)
+    mark_inside!(tm, :string) do tm2::TextStyleModifier
+        mark_between!(tm2, "\$(", ")", :interp)
+        mark_after!(tm2, "\$", :interp)
+        mark_inside!(tm2, :interp) do tm3::TextStyleModifier
+            mark_julia!(tm3)
+            nothing::Nothing
+        end
+        mark_after!(tm2, "\\", :exit)
+    end
+    # functions
+
+    mark_before!(tm, "(", :funcn, until = UNTILS)
+    # type annotations
+    mark_after!(tm, "::", :type, until = UNTILS)
+ #   ....
 ```
 - See also: `TextStyleModifier`, `mark_between!`, `mark_all!`, `clear!`, `set_text!`
 """
@@ -434,6 +502,17 @@ This will highlight the inside of the label. In the Julia example, this is used 
 the inside of string interpolators.
 The new `TextStyleModifier` will be passed the styles from the provided `TextStyleModifier`.
 ```julia
+# julia string interpolation highlighting:
+    mark_between!(tm, "\"", :string)
+    mark_inside!(tm, :string) do tm2::TextStyleModifier
+        mark_between!(tm2, "\$(", ")", :interp)
+        mark_after!(tm2, "\$", :interp)
+        mark_inside!(tm2, :interp) do tm3::TextStyleModifier
+            mark_julia!(tm3)
+            nothing::Nothing
+        end
+        mark_after!(tm2, "\\", :exit)
+    end
 ```
 - See also: mark_after!, clear!, `mark_for!`, `string(::TextStyleModifier)`, `julia_block!`
 """
@@ -453,13 +532,11 @@ function mark_inside!(f::Function, tm::TextModifier, label::Symbol)
             for (range, lbl) in new_tm.marks
         )
         sortedmarks = sort(collect(new_marks), by=x -> x[1])
-
         # Initialize variables for processing
         final_marks = Vector{Pair{UnitRange{Int64}, Symbol}}()
         at_mark = 1
         n = length(sortedmarks)
         kmax = maximum(key)
-
         # Process the marks and avoid duplicates
         while true
             if at_mark > n || n == 0
@@ -469,10 +546,8 @@ function mark_inside!(f::Function, tm::TextModifier, label::Symbol)
                 end
                 break
             end
-
             this_mark = sortedmarks[at_mark]
             new_min = minimum(this_mark[1])
-
             # Add range from base_pos to the start of this_mark, if non-empty
             if base_pos < new_min
                 push!(final_marks, base_pos:(new_min - 1) => label)
@@ -484,7 +559,6 @@ function mark_inside!(f::Function, tm::TextModifier, label::Symbol)
 
             at_mark += 1
         end
-
         # Replace the marks for the current key with updated ranges
         delete!(tm.marks, key)
         push!(tm.marks, final_marks...)
@@ -498,20 +572,28 @@ mark_for!(tm::TextModifier, ch::String, f::Int64, label::Symbol) -> ::Nothing
 ```
 Marks beyond the characters `ch` for `f` bytes as `label`.
 ```julia
+using OliveHighlighters
+
+tm = Highlighter("sample \\n")
+
+mark_for!(tm, "\\", 1, :exit)
+style!(tm, :exit, "color" => "lightblue")
+
+string(tm)
 ```
-- See also: `mark_line_after!`, 
+- See also: `mark_line_after!`, `mark_julia!`, `string(::TextStyleModifier)`
 """
 function mark_for!(tm::TextModifier, ch::String, f::Int64, label::Symbol)
     if length(tm.raw) == 1
         return
     end
     chars = findall(ch, tm.raw)
-    [begin
-    if ~(length(findall(i -> length(findall(n -> n in i, pos)) > 0,
-     collect(keys(tm.marks)))) > 0)
-        push!(tm.marks, minimum(pos):maximum(pos) + f => label)
+    for pos in chars
+        if ~(length(findall(i -> length(findall(n -> n in i, pos)) > 0,
+            collect(keys(tm.marks)))) > 0)
+            push!(tm.marks, minimum(pos):maximum(pos) + f => label)
+        end
     end
-    end for pos in chars]
     nothing::Nothing
 end
 
@@ -528,7 +610,8 @@ Marks the line after a certain `String` with the `Symbol` `label` in `tm.marks`.
 mark_line_after!(tm::TextModifier, ch::String, label::Symbol) = mark_between!(tm, ch, "\n", label)
 
 OPS::Vector{SubString} = split("""<: = == < > => -> || -= += + / * - ~ <= >= &&""", " ")
-UNTILS::Vector{String} = [" ", ",", ")", "\n", "<br>", "&nbsp;", ";"]
+UNTILS::Tuple = (" ", ",", ")", "\n", "<br>", "&nbsp;", ";")
+
 """
 ```julia
 mark_julia!(tm::TextModifier) -> ::Nothing
@@ -770,9 +853,30 @@ end
 # (this binding is from `OliveHighlighters`)
 Base.string(tm::TextStyleModifier; args ...) -> ::String
 ```
-
+This binding turns a `TextStyleModifier`'s text into a highlighted HTML 
+result with inline styles. Make sure to *mark* **and** *style* the 
+`TextStyleModifier` **before** sending it through this function. 
+`args` allows us to provide key-word arguments to the current elements, 
+for example we could use this to set the `class`.
 ```julia
+using OliveHighlighters
 
+tm = TextStyleModifier("function example(x::Any = 5) end")
+
+OliveHighlighters.julia_block!(tm)
+
+style!(tm, :default, "color" => "#333333")
+
+display("text/html", string(tm))
+
+# reloading
+set_text!(tm, "function sample end")
+
+OliveHighlighters.mark_julia!(tm)
+
+OliveHighlighters.mark_all(tm, "sample", :sample)
+style!(tm, :sample, "color" => "red")
+display("text/html", string(tm))
 ```
 - See also: `TextStyleModifier`, `style_toml!`, `clear!`, `set_text!`
 """
