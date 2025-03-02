@@ -217,8 +217,19 @@ style!(tm::TextStyleModifier, marks::Symbol, sty::Vector{Pair{String, String}}) 
 ```
 These `style!` bindings belong to `OliveHighlighters`.These will set the style for a particular class on a `TextStyleModifier` to `sty`.
 ```julia
+using OliveHighlighters
+
+sample_str = "[key]"
+
+hl = Highlighter(sample_str)
+
+style!(hl, :key, "color" => "blue")
+
+mark_between!(hl, "[", "]", :key)
+
+string(hl)
 ```
-- See also: 
+- See also: `mark_all!`, `string(::TextStyleModifier)`, `clear!`, `set_text!`
 """
 function style!(tm::TextStyleModifier, marks::Symbol, sty::Pair{String, String} ...)
     style!(tm, marks, [sty ...])
@@ -238,10 +249,23 @@ mark_all!(tm::TextModifier, s::String, label::Symbol) -> ::Nothing
 # mark all (`Char`)
 mark_all!(tm::TextModifier, c::Char, label::Symbol) -> ::Nothing
 ```
-- See also: 
+```julia
+using OliveHighlighters
+
+sample_str = "function example end mutable struct end"
+
+hl = Highlighter(sample_str)
+
+style!(hl, :end, "color" => "darkred")
+
+mark_all!(hl, "end", :end)
+
+string(hl)
+```
+- See also: `mark_between!`, `mark_before!`, `mark_after!`
 """
 function mark_all!(tm::TextModifier, s::String, label::Symbol)
-    [begin
+    for v in findall(s, tm.raw)
         if maximum(v) == length(tm.raw) && minimum(v) == 1
             push!(tm, v => label)
         elseif maximum(v) == length(tm.raw)
@@ -257,15 +281,15 @@ function mark_all!(tm::TextModifier, s::String, label::Symbol)
                 push!(tm, v => label)
             end
         end
-     end for v in findall(s, tm.raw)]
+     end
     nothing::Nothing
 end
 
 
 function mark_all!(tm::TextModifier, c::Char, label::Symbol)
-    [begin
+    for v in findall(c, tm.raw)
         push!(tm, v => label)
-    end for v in findall(c, tm.raw)]
+    end
     nothing::Nothing
 end
 
@@ -279,6 +303,19 @@ mark_between!(tm::TextModifier, s::String, ...) -> ::Nothing
 mark_between!(tm::TextModifier, s::String, label::Symbol)
 # mark between two different characters
 mark_between!(tm::TextModifier, s::String, s2::String, label::Symbol)
+```
+```julia
+using OliveHighlighters
+
+sample_str = "[key]"
+
+hl = Highlighter(sample_str)
+
+style!(hl, :key, "color" => "blue")
+
+mark_between!(hl, "[", "]", :key)
+
+string(hl)
 ```
 - See also: `TextStyleModifier`, `mark_all!`, `julia_block!`, `clear!`
 """
@@ -728,6 +765,17 @@ function style_toml!(tm::OliveHighlighters.TextStyleModifier)
     style!(tm, :number, ["color" => "#8b0000"])
 end
 
+"""
+```julia
+# (this binding is from `OliveHighlighters`)
+Base.string(tm::TextStyleModifier; args ...) -> ::String
+```
+
+```julia
+
+```
+- See also: `TextStyleModifier`, `style_toml!`, `clear!`, `set_text!`
+"""
 function string(tm::TextStyleModifier; args ...)
     filter!(mark -> ~(length(mark[1]) < 1), tm.marks)
     sortedmarks = sort(collect(tm.marks), by=x->x[1])
