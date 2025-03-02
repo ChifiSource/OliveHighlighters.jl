@@ -38,9 +38,41 @@ display("text/html", string(tm))
 ```
 ##### provides
 - **Base**
+- `TextModifier`
+- `TextStyleModifier`
+- `Highlighter`
+- `classes`
+- `remove!`
+- `set_text!`
+- `clear!`
+- `style!(tm::TextStyleModifier, marks::Symbol, sty::Pair{String, String} ...)`
+- `style!(tm::TextStyleModifier, marks::Symbol, sty::Vector{Pair{String, String}}) = push!(tm.styles, marks => sty)`
+- `string(tm::TextStyleModifier; args ...)`
 - **marking functions**
+- `mark_all!(tm::TextModifier, s::String, label::Symbol)`
+- `mark_all!(tm::TextModifier, c::Char, label::Symbol)`
+- `mark_between!(tm::TextModifier, s::String, label::Symbol)`
+- `mark_between!(tm::TextModifier, s::String, s2::String, label::Symbol)`
+- `mark_before!(tm::TextModifier, s::String, label::Symbol;
+    until::Vector{String} = Vector{String}(), includedims_l::Int64 = 0,
+    includedims_r::Int64 = 0)`
+- `mark_after!(tm::TextModifier, s::String, label::Symbol;
+    until::Vector{String} = Vector{String}(), includedims_r::Int64 = 0,
+    includedims_l::Int64 = 0)`
+- `mark_inside!(f::Function, tm::TextModifier, label::Symbol)`
+- `mark_for!(tm::TextModifier, ch::String, f::Int64, label::Symbol)`
+- `mark_line_after!(tm::TextModifier, ch::String, label::Symbol) = mark_between!(tm, ch, "\n", label)`
 - **included highlighters**
+- `mark_julia!(tm::TextModifier)`
+- `style_julia!(tm::TextStyleModifier)`
+- `julia_block!(tm::TextStyleModifier)`
+- `mark_markdown!(tm::OliveHighlighters.TextModifier)`
+- `style_markdown!(tm::OliveHighlighters.TextStyleModifier)`
+- `mark_toml!(tm::OliveHighlighters.TextModifier)`
+- `style_toml!(tm::OliveHighlighters.TextStyleModifier)`
 - **internal**
+- `rep_in`
+- `rep_str`
 """
 module OliveHighlighters
 using ToolipsServables
@@ -154,21 +186,43 @@ const Highlighter = TextStyleModifier
 
 """
 ```julia
-classes(tm::TextStyleModifier) -> Base.Generator)
+classes(tm::TextStyleModifier) -> Base.Generator
 ```
 Returns a `Tuple` generator for the classes currently styled in the `TextStyleModifier`. This 
-    is equivalent of getting the keys of the `styles` field. `remove!` can also be used to remove classes.
+    is equivalent of getting the keys of the `styles` field. `remove!` can also be used to remove classes. 
+    (To allocate the generator simply provide it to a `Vector`)
 ```julia
 using OliveHighlighters; TextStyleModifier, style_julia!
 tm = TextStyleModifier("")
 style_julia!(tm)
 
 classes(tm)
+
+# allocated:
+my_classes = [classes(tm) ...]
 ```
-- See also: `set_text!`, `TextStyleModifier`, `clear!`
+- See also: `set_text!`, `TextStyleModifier`, `clear!`, `remove!(tm::TextStyleModifier, key::Symbol)`
 """
 classes(tm::TextStyleModifier) = (key for key in keys(tm.styles))
 
+"""
+```julia
+remove!(tm::TextStyleModifier, key::Symbol)
+```
+Removes a given style string from a `TextStyleModifier`
+```julia
+using OliveHighlighters; TextStyleModifier, style_julia!
+tm = TextStyleModifier("")
+style_julia!(tm)
+
+# check classes:
+classes(tm)
+
+# remove class:
+remove!(tm, :default)
+```
+- See also: `set_text!`, `TextStyleModifier`, `clear!`
+"""
 remove!(tm::TextStyleModifier, key::Symbol) = delete!(tm.styles, key)
 
 """
@@ -396,8 +450,29 @@ mark_before!(tm::TextModifier, s::String, label::Symbol; until::Vector{String} =
 includedims_r::Int64 = 0) -> ::Nothing
 ```
 `mark_before` will mark the values before a label -- a good example of this is a `Function`, we would `mark_before` the parenthesis, 
-`until` a space or new line.
+`until` a space or new line. `includedims` will include that number of characters before and after what you want to include -- for example, 
+for a multi-line string we would set this to 3 (if we wanted to use `mark_before!` for that.) In most cases, this argument won't be used.
 ```julia
+mark_julia!(tm::TextModifier) = begin
+    tm.raw = replace(tm.raw, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ")
+    # comments
+    mark_between!(tm, "#=", "=#", :comment)
+    mark_line_after!(tm, "#", :comment)
+    # strings + string interpolation
+    mark_between!(tm, "\"", :string)
+    mark_inside!(tm, :string) do tm2::TextStyleModifier
+        mark_between!(tm2, "\$(", ")", :interp)
+        mark_after!(tm2, "\$", :interp)
+        mark_inside!(tm2, :interp) do tm3::TextStyleModifier
+            mark_julia!(tm3)
+            nothing::Nothing
+        end
+        mark_after!(tm2, "\\", :exit)
+    end
+    # functions
+
+    mark_before!(tm, "(", :funcn, until = UNTILS)
+    ...
 ```
 - See also: `TextStyleModifier`, `mark_between!`, `mark_all!`, `clear!`, `set_text!`
 """
@@ -436,7 +511,8 @@ mark_after!(tm::TextModifier, s::String, label::Symbol;
     includedims_l::Int64 = 0) -> ::Nothing
 ```
 Marks after `s` for every occurance of `s` in tm.raw. For example, for type annotations we could mark after `::` until 
-    space or `\\n`.
+    space or `\\n`. `includedims` will include that number of characters before and after what you want to include -- for example, 
+for a multi-line string we would set this to 3 (if we wanted to use `mark_before!` for that.) In most cases, this argument won't be used.
 ```julia
 # this is the function used to mark types in the Julia highlighter, for example:
 mark_julia!(tm::TextModifier) = begin
@@ -597,13 +673,21 @@ function mark_for!(tm::TextModifier, ch::String, f::Int64, label::Symbol)
     nothing::Nothing
 end
 
-
 """
 ```julia
 mark_line_after!(tm::TextModifier, ch::String, label::Symbol) -> ::Nothing
 ```
 Marks the line after a certain `String` with the `Symbol` `label` in `tm.marks`.
 ```julia
+using OliveHighlighters
+
+julia_code = "julia"
+tm = Highlighter(julia_code)
+
+mark_line_after!(tm, "#", :comment)
+
+style!(tm, :comment, "color" => "gray", "font-weight" => "bold")
+string(tm)
 ```
 - See also: `mark_line_after!`, `mark_for!`
 """
@@ -618,6 +702,17 @@ mark_julia!(tm::TextModifier) -> ::Nothing
 ```
 Performs the marking portion of highlighting for Julia code.
 ```julia
+using OliveHighlighters
+
+lighter = Highlighter("function example(x::Any)\\nend")
+
+# calls `mark_julia!` and `style_julia!`
+OliveHighlighters.julia_block!(lighter)
+
+# clears marks from `mark_julia` using `clear!` and updates `lighter.raw`
+set_text!(lighter, "struct Example\\nfield::Any\\nend")
+
+OliveHighlighters.mark_julia!(lighter)
 ```
 - See also: `mark_line_after!`, `style_julia!`, `mark_between!`, `TextStyleModifier`
 """
@@ -683,9 +778,19 @@ end
 ```julia
 style_julia!(tm::TextStyleModifier) -> ::Nothing
 ```
-Performs the styling for a Julia highlighter -- note that this only needs to be called once with 
-    `set_text!`.
+Performs the styling for a Julia highlighter. Note this function only needs to be called once on 
+    a given highlighter; after styled, we can use `set_text!`
 ```julia
+using OliveHighlighters
+
+lighter = Highlighter("function example(x::Any)\\nend")
+
+# mark and style separately, these are also combined into `julia_block!`
+
+OliveHighlighters.mark_julia!(lighter)
+OliveHighlighters.style_julia!(lighter)
+
+my_result::String = string(lighter)
 ```
 - See also: `mark_line_after!`, `style_julia!`, `mark_between!`, `TextStyleModifier`
 """
@@ -722,8 +827,19 @@ julia_block!(tm::TextStyleModifier) -> ::Nothing
 Calls both `style_julia!` and `mark_julia!` in order to turn a loaded `TextStyleModifier` 
 straight into highlighted Julia.
 ```julia
+using OliveHighlighters
+
+lighter = Highlighter("function example(x::Any)\\nend")
+
+# calls `mark_julia!` and `style_julia!`
+OliveHighlighters.julia_block!(lighter)
+
+# clears marks from `mark_julia` using `clear!` and updates `lighter.raw`
+set_text!(lighter, "struct Example\\nfield::Any\\nend")
+
+OliveHighlighters.mark_julia!(lighter)
 ```
-- See also: `mark_line_after!`, `style_julia!`, `mark_julia!`, `TextStyleModifier`
+- See also: `mark_line_after!`, `style_julia!`, `mark_julia!`, `Highlighter`, `mark_julia`, `set_text!`
 """
 function julia_block!(tm::TextStyleModifier)
     mark_julia!(tm)
@@ -935,7 +1051,6 @@ function string(tm::TextStyleModifier; args ...)
     end
     output::String
 end
-
 
 export Highlighter, clear!, set_text!, classes, style!, remove!
 end # module OliveHighlighters
