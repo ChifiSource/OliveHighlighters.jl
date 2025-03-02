@@ -694,7 +694,7 @@ string(tm)
 mark_line_after!(tm::TextModifier, ch::String, label::Symbol) = mark_between!(tm, ch, "\n", label)
 
 OPS::Vector{SubString} = split("""<: = == < > => -> || -= += + / * - ~ <= >= &&""", " ")
-UNTILS::Tuple = (" ", ",", ")", "\n", "<br>", "&nbsp;", ";")
+UNTILS::Vector{String} = [" ", ",", ")", "\n", "<br>", "&nbsp;", ";"]
 
 """
 ```julia
