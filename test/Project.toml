@@ -1,0 +1,11 @@
+name = "test"
+uuid = "0e4790cb-a028-406d-9c42-036bf90bb055"
+authors = ["emmac "]
+version = "0.1.0"
+
+[deps]
+OliveHighlighters = "f769160f-f39a-4920-b1de-ba699e2d8893"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[compat]
+Test = "1.11.0"

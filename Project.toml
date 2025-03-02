@@ -5,3 +5,12 @@ version = "0.1.0"
 
 [deps]
 ToolipsServables = "bf3a9e68-ca66-4981-8178-9d71c4f8abaa"
+
+[compat]
+ToolipsServables="0.2.0"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
