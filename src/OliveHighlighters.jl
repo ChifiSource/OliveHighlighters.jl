@@ -570,10 +570,6 @@ function mark_after!(tm::TextModifier, s::String, label::Symbol;
     nothing::Nothing
 end
 
-
-
-
-
 """
 ```julia
 mark_inside!(f::Function, tm::TextModifier, label::Symbol) -> ::Nothing
@@ -749,6 +745,8 @@ mark_julia!(tm::TextModifier) = begin
     mark_all!(tm, "using", :using)
     mark_all!(tm, "end", :end)
     mark_all!(tm, "struct", :struct)
+    mark_all!(tm, "const", :using)
+    mark_all!(tm, "global", :global)
     mark_all!(tm, "abstract", :abstract)
     mark_all!(tm, "mutable", :mutable)
     mark_all!(tm, "if", :if)
@@ -822,6 +820,7 @@ style_julia!(tm::TextStyleModifier) = begin
     style!(tm, :params, ["color" => "#00008B"])
     style!(tm, :comment, ["color" => "#808080"])
     style!(tm, :interp, ["color" => "#420000"])
+    style!(tm, :global, ["color" => "#ff0066"])
     nothing::Nothing
 end
 
