@@ -96,7 +96,7 @@ s = rep_in(s)
 """
 rep_in(s::String) = replace(s, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ", 
 "&#40;" => "(", "&#41;" => ")", "&#34;" => "\"", "&#60;" => "<", "&#62;" => ">", 
-"&#36;" => "\$", "&lt;" => "<", "&gt;" => ">")
+"&#36;" => "\$", "&lt;" => "<", "&gt;" => ">", "&#64;" => "@")
 
 rep_str(s::String) = replace(s, " "  => "&nbsp;",
 "\n"  =>  "<br>", "\\" => "&bsol;", "&#61;" => "=")
@@ -177,8 +177,7 @@ mutable struct TextStyleModifier <: TextModifier
     function TextStyleModifier(raw::String = "")
         marks = Dict{Symbol, UnitRange{Int64}}()
         styles = Dict{Symbol, Vector{Pair{String, String}}}()
-        new(replace(raw, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ", 
-        "&#40;" => "(", "&#41;" => ")"), Vector{Int64}(), marks, styles)
+        new(rep_in(raw), Vector{Int64}(), marks, styles)
     end
 end
 
@@ -295,7 +294,8 @@ function push!(tm::TextStyleModifier, p::Pair{UnitRange{Int64}, Symbol})
     if isnothing(found)
         push!(tm.marks, p)
         vecp = Vector(p[1])
-        [push!(tm.taken, val) for val in p[1]]
+        tm.taken = vcat(tm.taken, vecp)
+        return
     end
     nothing::Nothing
 end
@@ -541,31 +541,32 @@ mark_julia!(tm::TextModifier) = begin
 - See also: `TextStyleModifier`, `mark_between!`, `mark_all!`, `clear!`, `set_text!`
 """
 function mark_after!(tm::TextModifier, s::String, label::Symbol;
-    until::Vector{String} = Vector{String}(), includedims_r::Int64 = 0,
-    includedims_l::Int64 = 0)
+    until::Vector{String} = Vector{String}(), includedims_l::Int64 = 0,
+    includedims_r::Int64 = 0)
     chars = findall(s, tm.raw)
     for labelrange in chars
-        ending = findnext(" ", tm.raw,  labelrange[1])
+        ending = findnext(" ", tm.raw, labelrange[end])
         if isnothing(ending)
-            ending  = length(tm.raw)
+            ending = length(tm.raw)
         else
             ending = ending[1]
         end
+        
         if length(until) > 0
-            lens =  [begin
-                    point = findnext(d, tm.raw,  maximum(labelrange) + 1)
-                    if ~(isnothing(point))
-                        maximum(point) - length(d)
-                    else
-                        length(tm.raw)
-                    end
+            lens = [begin
+                        point = findnext(d, tm.raw, maximum(labelrange) + 1)
+                        if ~(isnothing(point))
+                            maximum(point) - 1
+                        else
+                            length(tm.raw)
+                        end
                     end for d in until]
             ending = minimum(lens)
         end
-        pos = minimum(labelrange) - includedims_l:ending - includedims_r
-        push!(tm,
-        pos => label)
+        pos = (minimum(labelrange) - includedims_l):(ending - includedims_r)
+        push!(tm, pos => label)
     end
+    
     nothing::Nothing
 end
 
@@ -599,8 +600,6 @@ function mark_inside!(f::Function, tm::TextModifier, label::Symbol)
         new_tm = TextStyleModifier(tm.raw[key])
         new_tm.styles = tm.styles
         f(new_tm)
-
-        # Prepare to adjust marks
         base_pos = minimum(key)
         lendiff = base_pos - 1
         new_marks = Dict(
@@ -608,7 +607,6 @@ function mark_inside!(f::Function, tm::TextModifier, label::Symbol)
             for (range, lbl) in new_tm.marks
         )
         sortedmarks = sort(collect(new_marks), by=x -> x[1])
-        # Initialize variables for processing
         final_marks = Vector{Pair{UnitRange{Int64}, Symbol}}()
         at_mark = 1
         n = length(sortedmarks)
@@ -635,7 +633,6 @@ function mark_inside!(f::Function, tm::TextModifier, label::Symbol)
 
             at_mark += 1
         end
-        # Replace the marks for the current key with updated ranges
         delete!(tm.marks, key)
         push!(tm.marks, final_marks...)
     end
@@ -694,7 +691,7 @@ string(tm)
 mark_line_after!(tm::TextModifier, ch::String, label::Symbol) = mark_between!(tm, ch, "\n", label)
 
 OPS::Vector{SubString} = split("""<: = == < > => -> || -= += + / * - ~ <= >= &&""", " ")
-UNTILS::Vector{String} = [" ", ",", ")", "\n", "<br>", "&nbsp;", ";"]
+UNTILS::Vector{String} = [" ", ",", ")", "\n", "<br>", "&nbsp;", ";", "(", "{", "}"]
 
 """
 ```julia
@@ -720,8 +717,9 @@ mark_julia!(tm::TextModifier) = begin
     tm.raw = replace(tm.raw, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ")
     # comments
     mark_between!(tm, "#=", "=#", :comment)
-    mark_line_after!(tm, "#", :comment)
+    
     # strings + string interpolation
+    mark_between!(tm, "\"\"\"", :string)
     mark_between!(tm, "\"", :string)
     mark_inside!(tm, :string) do tm2::TextStyleModifier
         mark_between!(tm2, "\$(", ")", :interp)
@@ -732,20 +730,25 @@ mark_julia!(tm::TextModifier) = begin
         end
         mark_after!(tm2, "\\", :exit)
     end
+    mark_line_after!(tm, "#", :comment)
+    mark_between!(tm, "'", :char)
     # functions
-
-    mark_before!(tm, "(", :funcn, until = UNTILS)
-    # type annotations
     mark_after!(tm, "::", :type, until = UNTILS)
+    mark_before!(tm, "(", :funcn, until = UNTILS)
+    mark_between!(tm, "{", "}", :params)
+    mark_before!(tm, "{", :type, until = UNTILS)
+    # type annotations
     # macros
     mark_after!(tm, "@", :macro, until = UNTILS)
-    mark_between!(tm, "'", :char)
+    
     # keywords
     mark_all!(tm, "function", :func)
     mark_all!(tm, "import", :import)
     mark_all!(tm, "using", :using)
     mark_all!(tm, "end", :end)
     mark_all!(tm, "struct", :struct)
+    mark_all!(tm, "const", :using)
+    mark_all!(tm, "global", :global)
     mark_all!(tm, "abstract", :abstract)
     mark_all!(tm, "mutable", :mutable)
     mark_all!(tm, "if", :if)
@@ -816,8 +819,10 @@ style_julia!(tm::TextStyleModifier) = begin
     style!(tm, :exit, ["color" => "#cc0099"])
     style!(tm, :op, ["color" => "#0C023E"])
     style!(tm, :macro, ["color" => "#43B3AE"])
+    style!(tm, :params, ["color" => "#00008B"])
     style!(tm, :comment, ["color" => "#808080"])
     style!(tm, :interp, ["color" => "#420000"])
+    style!(tm, :global, ["color" => "#ff0066"])
     nothing::Nothing
 end
 
@@ -1002,7 +1007,7 @@ function string(tm::TextStyleModifier; args ...)
     sortedmarks = sort(collect(tm.marks), by=x->x[1])
     n::Int64 = length(sortedmarks)
     if n == 0
-        txt = a("modiftxt", text = rep_str(tm.raw); args ...)
+        txt = a("-", text = rep_str(tm.raw); args ...)
         style!(txt, tm.styles[:default] ...)
         return(string(txt))::String
     end
@@ -1010,7 +1015,7 @@ function string(tm::TextStyleModifier; args ...)
     output::String = ""
     mark_start::Int64 = minimum(sortedmarks[1][1])
     if mark_start > 1
-        txt = span("modiftxt", text = rep_str(tm.raw[1: mark_start - 1]);  args ...)
+        txt = span("-", text = rep_str(tm.raw[1: mark_start - 1]);  args ...)
         style!(txt, tm.styles[:default] ...)
         output = string(txt)
     end
@@ -1020,29 +1025,29 @@ function string(tm::TextStyleModifier; args ...)
             last_mark = sortedmarks[at_mark - 1][1]
             lastmax = maximum(last_mark)
             if minimum(mark) - lastmax > 0
-                txt = span("modiftxt", text = rep_str(tm.raw[lastmax + 1:minimum(mark) - 1]); args ...)
+                txt = span("-", text = rep_str(tm.raw[lastmax + 1:minimum(mark) - 1]); args ...)
                 style!(txt, tm.styles[:default] ...)
                 output = output * string(txt)
             end
         end
         styname = sortedmarks[at_mark][2]
         try
-            txt = span("modiftxt", text = rep_str(tm.raw[mark]); args ...)
+            txt = span("-", text = rep_str(tm.raw[mark]); args ...)
         catch e
-            Base.showerror(stdout, e)
             @warn "error with text: " * tm.raw
             @warn "positions: $mark"
             @warn "mark: $styname"
+            throw(e)
         end
         if styname in keys(tm.styles)
-            style!(txt, tm.styles[styname] ...)   
+            style!(txt, tm.styles[styname] ...)
         else
             style!(txt, tm.styles[:default] ...)
         end
         output = output * string(txt)
         if at_mark == n
             if maximum(mark) != length(tm.raw)
-                txt = span("modiftxt", text = rep_str(tm.raw[maximum(mark) + 1:length(tm.raw)]); args ...)
+                txt = span("-", text = rep_str(tm.raw[maximum(mark) + 1:length(tm.raw)]); args ...)
                 style!(txt, tm.styles[:default] ...)
                 output = output * string(txt)
             end
