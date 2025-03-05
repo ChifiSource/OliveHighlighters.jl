@@ -717,8 +717,9 @@ mark_julia!(tm::TextModifier) = begin
     tm.raw = replace(tm.raw, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ")
     # comments
     mark_between!(tm, "#=", "=#", :comment)
-    mark_line_after!(tm, "#", :comment)
+    
     # strings + string interpolation
+    mark_between!(tm, "\"\"\"", :string)
     mark_between!(tm, "\"", :string)
     mark_inside!(tm, :string) do tm2::TextStyleModifier
         mark_between!(tm2, "\$(", ")", :interp)
@@ -729,6 +730,7 @@ mark_julia!(tm::TextModifier) = begin
         end
         mark_after!(tm2, "\\", :exit)
     end
+    mark_line_after!(tm, "#", :comment)
     mark_between!(tm, "'", :char)
     # functions
     mark_after!(tm, "::", :type, until = UNTILS)
