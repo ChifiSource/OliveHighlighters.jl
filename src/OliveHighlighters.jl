@@ -364,18 +364,22 @@ string(hl)
 """
 function mark_all!(tm::TextModifier, s::String, label::Symbol)
     for v in findall(s, tm.raw)
-        if maximum(v) == length(tm.raw) && minimum(v) == 1
+        valmax, n = maximum(v), length(tm.raw)
+        if valmax == n && minimum(v) == 1
             push!(tm, v => label)
-        elseif maximum(v) == length(tm.raw)
+        elseif valmax == n
             if tm.raw[v[1] - 1] in repeat_offenders
                 push!(tm, v => label)
             end
         elseif minimum(v) == 1
-            if tm.raw[maximum(v) + 1] in repeat_offenders
+            if tm.raw[valmax + 1] in repeat_offenders
                 push!(tm, v => label)
             end
         else
-            if tm.raw[v[1] - 1] in repeat_offenders && tm.raw[maximum(v) + 1] in repeat_offenders
+            if n < valmax
+                continue
+            end
+            if tm.raw[v[1] - 1] in repeat_offenders && tm.raw[valmax + 1] in repeat_offenders
                 push!(tm, v => label)
             end
         end
@@ -477,32 +481,43 @@ mark_julia!(tm::TextModifier) = begin
 - See also: `TextStyleModifier`, `mark_between!`, `mark_all!`, `clear!`, `set_text!`
 """
 function mark_before!(tm::TextModifier, s::String, label::Symbol;
-    until::Vector{String} = Vector{String}(), includedims_l::Int64 = 0,
+    until::Vector{String} = repeat_offenders, includedims_l::Int64 = 0,
     includedims_r::Int64 = 0)
+    
     chars = findall(s, tm.raw)
+
     for labelrange in chars
-        previous = findprev(" ", tm.raw,  labelrange[1])
-         if isnothing(previous)
-            previous  = length(tm.raw)
-        else
-            previous = previous[1]
+        start_idx = labelrange[1]
+
+        # Find the previous space
+        previous = findprev(isequal(' '), tm.raw, start_idx)
+        previous = isnothing(previous) ? 1 : previous[1]  # Ensure it's an index
+
+        # If we have "until" delimiters, find the closest one
+        if !isempty(until)
+            prev_positions = Int[]
+            for d in until
+                point = findprev(d, tm.raw, start_idx - 1)
+                if !isnothing(point)
+                    push!(prev_positions, point[1] + lastindex(d))
+                else
+                    push!(prev_positions, 1)
+                end
+            end
+            previous = maximum(prev_positions)
         end
-        if length(until) > 0
-            lens =  [begin
-                    point = findprev(d, tm.raw,  minimum(labelrange) - 1)
-                    if ~(isnothing(point))
-                        minimum(point) + length(d)
-                    else
-                        1
-                    end
-                    end for d in until]
-            previous = maximum(lens)
+
+        # Define the marking range correctly
+        pos = (previous - includedims_l):(maximum(labelrange) - 1 + includedims_r)
+        if length(pos)  == 0
+            continue
         end
-        pos = previous - includedims_l:maximum(labelrange) - 1 + includedims_r
         push!(tm, pos => label)
     end
-    nothing::Nothing
+
+    return nothing
 end
+
 
 """
 ```julia
