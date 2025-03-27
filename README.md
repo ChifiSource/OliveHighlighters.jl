@@ -1,5 +1,12 @@
 <div align="center">
 <img src="https://github.com/ChifiSource/image_dump/blob/main/olive/0.1/olivehighlighters.png" width=225></img>
+
+  [![version](https://juliahub.com/docs/General/OliveHighlighters/stable/version.svg)](https://juliahub.com/ui/Packages/General/OliveHighlighters)
+
+  [![deps](https://juliahub.com/docs/General/OliveHighlighters/stable/deps.svg)](https://juliahub.com/ui/Packages/General/OliveHighlighters?t=2)
+
+  [![pkgeval](https://juliahub.com/docs/General/OliveHighlighters/stable/pkgeval.svg)](https://juliahub.com/ui/Packages/General/OliveHighlighters)
+  
 </div>
 
 `OliveHighlighters` is a [ToolipsServables](https://github.com/ChifiSource/ToolipsServables.jl)-based syntax highlighting system designed *primarily* for [Olive](https://github.com/ChifiSource/Olive.jl). The main objective of this highlighting system is to provide a clean and easy to modify stylized output for syntax in `Olive`, though it could (and has) easily be applied to other projects as well. 
