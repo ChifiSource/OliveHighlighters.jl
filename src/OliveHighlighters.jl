@@ -158,7 +158,7 @@ mutable struct TextStyleModifier <: TextModifier
     function TextStyleModifier(raw::String = "")
         marks = Dict{Symbol, UnitRange{Int64}}()
         styles = Dict{Symbol, Vector{Pair{String, String}}}()
-        new(Components.rep_in(raw), Vector{Int64}(), marks, styles)
+        new(ToolipsServables.rep_in(raw), Vector{Int64}(), marks, styles)
     end
 end
 
@@ -231,7 +231,7 @@ new_code = string(my_tm)
 - See also: `clear!`, `Highlighter`, `classes`
 """
 set_text!(tm::TextModifier, s::String) = begin 
-    tm.raw = Components.rep_in(s)
+    tm.raw = ToolipsServables.rep_in(s)
     clear!(tm)
     nothing::Nothing
 end
@@ -473,8 +473,6 @@ function mark_before!(tm::TextModifier, s::String, label::Symbol;
         # Find the previous space
         previous = findprev(isequal(' '), tm.raw, start_idx)
         previous = isnothing(previous) ? 1 : previous[1]  # Ensure it's an index
-
-        # If we have "until" delimiters, find the closest one
         if !isempty(until)
             prev_positions = Int[]
             for d in until
@@ -487,8 +485,6 @@ function mark_before!(tm::TextModifier, s::String, label::Symbol;
             end
             previous = maximum(prev_positions)
         end
-
-        # Define the marking range correctly
         pos = (previous - includedims_l):(maximum(labelrange) - 1 + includedims_r)
         if length(pos)  == 0
             continue
@@ -1051,6 +1047,7 @@ function string(tm::TextStyleModifier; args ...)
         end
         at_mark += 1
     end
+    sortedmarks = nothing
     output::String
 end
 
