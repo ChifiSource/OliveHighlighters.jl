@@ -1,11 +1,10 @@
 <div align="center">
 <img src="https://github.com/ChifiSource/image_dump/blob/main/olive/0.1/olivehighlighters.png" width=225></img>
+  
+[![version](https://juliahub.com/docs/General/OliveHighlighters/stable/version.svg)](https://juliahub.com/ui/Packages/General/OliveHighlighters)
+[![deps](https://juliahub.com/docs/General/OliveHighlighters/stable/deps.svg)](https://juliahub.com/ui/Packages/General/OliveHighlighters?t=2)[![pkgeval](https://juliahub.com/docs/General/OliveHighlighters/stable/pkgeval.svg)](https://juliahub.com/ui/Packages/General/OliveHighlighters)
 
-  [![version](https://juliahub.com/docs/General/OliveHighlighters/stable/version.svg)](https://juliahub.com/ui/Packages/General/OliveHighlighters)
-
-  [![deps](https://juliahub.com/docs/General/OliveHighlighters/stable/deps.svg)](https://juliahub.com/ui/Packages/General/OliveHighlighters?t=2)
-
-  [![pkgeval](https://juliahub.com/docs/General/OliveHighlighters/stable/pkgeval.svg)](https://juliahub.com/ui/Packages/General/OliveHighlighters)
+[docs](https://chifidocs.com/olive/OliveHighlighters) 
   
 </div>
 
@@ -53,7 +52,7 @@ using Pkg; Pkg.add("OliveHighlighters", rev = "Unstable")
 ```
 ##### documentation
 - All exports are available in the `OliveHighlighters` doc-string.
-- We are still working on getting our documentation website up, but there will be a documentation link **here** eventually.
+- [chifi docs documentation](https://chifidocs.com/olive/OliveHighlighters) [ecosystem](https://chifidocs.com/olive)
 ###### usage
 Usage of `OliveHighlighters` revolves around the `TextStyleModifier`, or `Highlighter` type. We create this type and then mutate it by adding our source and using *marking functions*.
 ```julia

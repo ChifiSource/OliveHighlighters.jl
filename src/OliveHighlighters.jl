@@ -71,7 +71,6 @@ display("text/html", string(tm))
 - `mark_toml!(tm::OliveHighlighters.TextModifier)`
 - `style_toml!(tm::OliveHighlighters.TextStyleModifier)`
 - **internal**
-- `rep_in`
 - `rep_str`
 """
 module OliveHighlighters
@@ -79,24 +78,6 @@ using ToolipsServables
 import ToolipsServables: Modifier, String, AbstractComponent, set_text!, push!, style!, string, set_text!, remove!
 
 const repeat_offenders = ('\n', ' ', ',', '(', ')', ';', '\"', ']', '[')
-
-"""
-```julia
-# (internal)
-rep_in(s::String) -> ::String
-```
-`rep_in` is an internal `OliveHighlighters` function that is used to replace client-side 
-character sequences with their Julia counter-parts. HTML DOMs will optimize the text by 
-putting it through a filter where certain special characters are represented with character codes. 
-This function replaces those with normal Unicode or ASCII characters. This is done automatically by the `TextStyleModifier`.
-```julia
-s = rep_in(s)
-```
-- See also: `rep_str`, `TextStyleModifier`, `TextModifier`,
-"""
-rep_in(s::String) = replace(s, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ", 
-"&#40;" => "(", "&#41;" => ")", "&#34;" => "\"", "&#60;" => "<", "&#62;" => ">", 
-"&#36;" => "\$", "&lt;" => "<", "&gt;" => ">", "&#64;" => "@")
 
 rep_str(s::String) = replace(s, " "  => "&nbsp;",
 "\n"  =>  "<br>", "\\" => "&bsol;", "&#61;" => "=")
@@ -177,7 +158,7 @@ mutable struct TextStyleModifier <: TextModifier
     function TextStyleModifier(raw::String = "")
         marks = Dict{Symbol, UnitRange{Int64}}()
         styles = Dict{Symbol, Vector{Pair{String, String}}}()
-        new(rep_in(raw), Vector{Int64}(), marks, styles)
+        new(ToolipsServables.rep_in(raw), Vector{Int64}(), marks, styles)
     end
 end
 
@@ -250,7 +231,7 @@ new_code = string(my_tm)
 - See also: `clear!`, `Highlighter`, `classes`
 """
 set_text!(tm::TextModifier, s::String) = begin 
-    tm.raw = rep_in(s)
+    tm.raw = ToolipsServables.rep_in(s)
     clear!(tm)
     nothing::Nothing
 end
@@ -492,8 +473,6 @@ function mark_before!(tm::TextModifier, s::String, label::Symbol;
         # Find the previous space
         previous = findprev(isequal(' '), tm.raw, start_idx)
         previous = isnothing(previous) ? 1 : previous[1]  # Ensure it's an index
-
-        # If we have "until" delimiters, find the closest one
         if !isempty(until)
             prev_positions = Int[]
             for d in until
@@ -506,8 +485,6 @@ function mark_before!(tm::TextModifier, s::String, label::Symbol;
             end
             previous = maximum(prev_positions)
         end
-
-        # Define the marking range correctly
         pos = (previous - includedims_l):(maximum(labelrange) - 1 + includedims_r)
         if length(pos)  == 0
             continue
@@ -735,6 +712,7 @@ mark_julia!(tm::TextModifier) = begin
     
     # strings + string interpolation
     mark_between!(tm, "\"\"\"", :string)
+    mark_line_after!(tm, "#", :comment)
     mark_between!(tm, "\"", :string)
     mark_inside!(tm, :string) do tm2::TextStyleModifier
         mark_between!(tm2, "\$(", ")", :interp)
@@ -745,7 +723,6 @@ mark_julia!(tm::TextModifier) = begin
         end
         mark_after!(tm2, "\\", :exit)
     end
-    mark_line_after!(tm, "#", :comment)
     mark_between!(tm, "'", :char)
     # functions
     mark_after!(tm, "::", :type, until = UNTILS)
@@ -1070,6 +1047,7 @@ function string(tm::TextStyleModifier; args ...)
         end
         at_mark += 1
     end
+    sortedmarks = nothing
     output::String
 end
 
