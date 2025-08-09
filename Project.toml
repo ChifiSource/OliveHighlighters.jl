@@ -1,7 +1,7 @@
 name = "OliveHighlighters"
 uuid = "f769160f-f39a-4920-b1de-ba699e2d8893"
 authors = ["emmac "]
-version = "0.1.4"
+version = "0.1.3"
 
 [deps]
 ToolipsServables = "bf3a9e68-ca66-4981-8178-9d71c4f8abaa"
