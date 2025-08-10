@@ -72,15 +72,82 @@ display("text/html", string(tm))
 - `style_toml!(tm::OliveHighlighters.TextStyleModifier)`
 - **internal**
 - `rep_str`
+- `_grapheme_starts`
+- `_bytepos_to_grapheme_index`
+- `_byte_range_to_grapheme_range`
+- `_grapheme_range_to_byte_range`
+- `_is_offender`
 """
 module OliveHighlighters
 using ToolipsServables
+using Unicode
 import ToolipsServables: Modifier, String, AbstractComponent, set_text!, push!, style!, string, set_text!, remove!
 
 const repeat_offenders = ('\n', ' ', ',', '(', ')', ';', '\"', ']', '[')
 
-rep_str(s::String) = replace(s, " "  => "&nbsp;",
-"\n"  =>  "<br>", "\\" => "&bsol;", "&#61;" => "=")
+rep_str(s::String) = replace(s,
+    " "  => "&nbsp;",
+    "\n" => "<br>",
+    "\\" => "&bsol;",
+    "&#61;" => "=")
+
+# ---------------------------
+# Helper utilities for Unicode-safe indexing
+# ---------------------------
+
+# Return a vector of starting *byte* indices for each grapheme cluster in s.
+# starts[i] is the byte index of the start of the i-th grapheme (1-based).
+function _grapheme_starts(s::String)
+    starts = Int[]
+    i = firstindex(s)
+    while i <= lastindex(s)
+        push!(starts, i)
+        i = nextind(s, i)
+    end
+    return starts
+end
+
+# Convert a byte position (index into the String) to a grapheme index (1-based)
+# using the `starts` vector created above.
+function _bytepos_to_grapheme_index(starts::Vector{Int}, bytepos::Int)
+    # find last start <= bytepos
+    idx = findlast(x -> x <= bytepos, starts)
+    return isnothing(idx) ? 1 : idx
+end
+
+# Convert a UnitRange{Int} over *bytes* (as returned by findall) to
+# a UnitRange{Int} over grapheme indices.
+function _byte_range_to_grapheme_range(starts::Vector{Int}, r::UnitRange{Int})
+    a = _bytepos_to_grapheme_index(starts, first(r))
+    b = _bytepos_to_grapheme_index(starts, last(r))
+    return a:b
+end
+
+# Convert a grapheme-range (a:b) to a byte-range in the original string
+# using the starts vector.
+function _grapheme_range_to_byte_range(starts::Vector{Int}, gr::UnitRange{Int}, s::String)
+    if isempty(starts)
+        return firstindex(s):lastindex(s)
+    end
+    start_byte = starts[first(gr)]
+    # find the byte index after the last grapheme, then subtract 1
+    if last(gr) < length(starts)
+        end_byte = prevind(s, starts[last(gr) + 1])  # last byte of the grapheme
+    else
+        end_byte = lastindex(s)
+    end
+    return start_byte:end_byte
+end
+
+# Helper to check whether a grapheme string (like " " or "\n" etc.) is in repeat_offenders
+function _is_offender(grapheme_str::AbstractString)
+    for c in repeat_offenders
+        if grapheme_str == string(c)
+            return true
+        end
+    end
+    return false
+end
 
 """
 ```julia
@@ -156,7 +223,7 @@ mutable struct TextStyleModifier <: TextModifier
     marks::Dict{UnitRange{Int64}, Symbol}
     styles::Dict{Symbol, Vector{Pair{String, String}}}
     function TextStyleModifier(raw::String = "")
-        marks = Dict{Symbol, UnitRange{Int64}}()
+        marks = Dict{UnitRange{Int64}, Symbol}()
         styles = Dict{Symbol, Vector{Pair{String, String}}}()
         new(ToolipsServables.rep_in(raw), Vector{Int64}(), marks, styles)
     end
@@ -206,6 +273,7 @@ remove!(tm, :default)
 remove!(tm::TextStyleModifier, key::Symbol) = delete!(tm.styles, key)
 
 """
+- `OliveHighlighters` binding
 ```julia
 set_text!(tm::TextStyleModifier, s::String) -> ::String
 ```
@@ -230,7 +298,7 @@ new_code = string(my_tm)
 ```
 - See also: `clear!`, `Highlighter`, `classes`
 """
-set_text!(tm::TextModifier, s::String) = begin 
+set_text!(tm::TextModifier, s::String) = begin
     tm.raw = ToolipsServables.rep_in(s)
     clear!(tm)
     nothing::Nothing
@@ -316,7 +384,6 @@ end
 
 style!(tm::TextStyleModifier, marks::Symbol, sty::Vector{Pair{String, String}}) = push!(tm.styles, marks => sty)
 
-
 """
 ```julia
 mark_all!(tm::TextModifier, ...) -> ::Nothing
@@ -344,34 +411,44 @@ string(hl)
 - See also: `mark_between!`, `mark_before!`, `mark_after!`
 """
 function mark_all!(tm::TextModifier, s::String, label::Symbol)
-    for v in findall(s, tm.raw)
-        valmax, n = maximum(v), length(tm.raw)
-        if valmax == n && minimum(v) == 1
-            push!(tm, v => label)
-        elseif valmax == n
-            if tm.raw[v[1] - 1] in repeat_offenders
-                push!(tm, v => label)
+    starts = _grapheme_starts(tm.raw)
+    chars = collect(graphemes(tm.raw))
+    total = length(chars)
+    for byte_range in findall(s, tm.raw)
+        gr = _byte_range_to_grapheme_range(starts, byte_range)
+        valmax = last(gr)
+        if valmax == total && first(gr) == 1
+            push!(tm, gr => label)
+        elseif valmax == total
+            if first(gr) > 1 && _is_offender(chars[first(gr) - 1])
+                push!(tm, gr => label)
             end
-        elseif minimum(v) == 1
-            if tm.raw[valmax + 1] in repeat_offenders
-                push!(tm, v => label)
-            end
-        else
-            if n < valmax
+        elseif first(gr) == 1
+            if valmax < 1
                 continue
             end
-            if tm.raw[v[1] - 1] in repeat_offenders && tm.raw[valmax + 1] in repeat_offenders
-                push!(tm, v => label)
+            if valmax < total && _is_offender(chars[valmax + 1])
+                push!(tm, gr => label)
+            end
+        else
+            if total < valmax
+                continue
+            end
+            before_ok = first(gr) > 1 && _is_offender(chars[first(gr) - 1])
+            after_ok  = valmax < total && _is_offender(chars[valmax + 1])
+            if before_ok && after_ok
+                push!(tm, gr => label)
             end
         end
-     end
+    end
     nothing::Nothing
 end
 
-
 function mark_all!(tm::TextModifier, c::Char, label::Symbol)
-    for v in findall(c, tm.raw)
-        push!(tm, v => label)
+    starts = _grapheme_starts(tm.raw)
+    for byte_range in findall(string(c), tm.raw)
+        gr = _byte_range_to_grapheme_range(starts, byte_range)
+        push!(tm, gr => label)
     end
     nothing::Nothing
 end
@@ -403,31 +480,43 @@ string(hl)
 - See also: `TextStyleModifier`, `mark_all!`, `julia_block!`, `clear!`
 """
 function mark_between!(tm::TextModifier, s::String, label::Symbol)
-	positions::Vector{UnitRange{Int64}} = findall(s, tm.raw)
-	for pos in positions
-		nd = findnext(s, tm.raw, maximum(pos) + 1)
-		if nd !== nothing
-			push!(tm, minimum(pos):maximum(nd) => label)
-		else
-			push!(tm, minimum(pos):length(tm.raw) => label)
-		end
-	end
-	nothing
+    starts = _grapheme_starts(tm.raw)
+    positions = findall(s, tm.raw)
+    for pos in positions
+        # find the next delim in positions that starts after this pos
+        nd = findfirst(p -> first(p) > last(pos), positions)
+        if nd !== nothing
+            nd_pos = positions[nd]
+            start_g = _byte_range_to_grapheme_range(starts, pos)
+            end_g   = _byte_range_to_grapheme_range(starts, nd_pos)
+            push!(tm, minimum(start_g):maximum(end_g) => label)
+        else
+            start_g = _byte_range_to_grapheme_range(starts, pos)
+            push!(tm, minimum(start_g):length(_grapheme_starts(tm.raw)) => label)
+        end
+    end
+    nothing::Nothing
 end
 
 function mark_between!(tm::TextModifier, s::String, s2::String, label::Symbol)
-	positions::Vector{UnitRange{Int64}} = findall(s, tm.raw)
-	for pos in positions
-		nd = findnext(s2, tm.raw, maximum(pos) + 1)
-		if nd !== nothing
-			push!(tm, minimum(pos):maximum(nd) => label)
-		else
-			push!(tm, minimum(pos):length(tm.raw) => label)
-		end
-	end
-	nothing
+    starts = _grapheme_starts(tm.raw)
+    positions = findall(s, tm.raw)
+    positions2 = findall(s2, tm.raw)
+    for pos in positions
+        # find first occurrence in positions2 whose start > last(pos)
+        nd_i = findfirst(p -> first(p) > last(pos), positions2)
+        if nd_i !== nothing
+            nd_pos = positions2[nd_i]
+            start_g = _byte_range_to_grapheme_range(starts, pos)
+            end_g   = _byte_range_to_grapheme_range(starts, nd_pos)
+            push!(tm, minimum(start_g):maximum(end_g) => label)
+        else
+            start_g = _byte_range_to_grapheme_range(starts, pos)
+            push!(tm, minimum(start_g):length(starts) => label)
+        end
+    end
+    nothing::Nothing
 end
-
 
 """
 ```julia
@@ -464,29 +553,47 @@ mark_julia!(tm::TextModifier) = begin
 function mark_before!(tm::TextModifier, s::String, label::Symbol;
     until::Vector{String} = repeat_offenders, includedims_l::Int64 = 0,
     includedims_r::Int64 = 0)
-    
-    chars = findall(s, tm.raw)
+    starts = _grapheme_starts(tm.raw)
+    chars = collect(graphemes(tm.raw))
+    positions = findall(s, tm.raw)
+    until_positions = Dict{String, Vector{UnitRange{Int}}}()
+    for d in until
+        until_positions[d] = findall(d, tm.raw)
+    end
 
-    for labelrange in chars
-        start_idx = labelrange[1]
-
-        # Find the previous space
-        previous = findprev(isequal(' '), tm.raw, start_idx)
-        previous = isnothing(previous) ? 1 : previous[1]  # Ensure it's an index
+    for labelrange_byte in positions
+        # convert label byte range to grapheme
+        label_gr = _byte_range_to_grapheme_range(starts, labelrange_byte)
+        start_gr = first(label_gr)
+        prev_positions = Int[]
         if !isempty(until)
-            prev_positions = Int[]
             for d in until
-                point = findprev(d, tm.raw, start_idx - 1)
-                if !isnothing(point)
-                    push!(prev_positions, point[1] + lastindex(d))
-                else
+                poslist = until_positions[d]
+                if isempty(poslist)
                     push!(prev_positions, 1)
+                    continue
+                end
+                # find last pos in poslist that ends before start of current label
+                found_idx = findlast(p -> last(p) < first(labelrange_byte), poslist)
+                if isnothing(found_idx)
+                    push!(prev_positions, 1)
+                else
+                    found_byte_range = poslist[found_idx]
+                    found_gr = _byte_range_to_grapheme_range(starts, found_byte_range)
+                    # take the grapheme position after the matched until token
+                    push!(prev_positions, maximum(found_gr) + 1)
                 end
             end
             previous = maximum(prev_positions)
+        else
+            previous = 1
         end
-        pos = (previous - includedims_l):(maximum(labelrange) - 1 + includedims_r)
-        if length(pos)  == 0
+
+        # clamp previous to at least 1
+        previous = max(1, previous - includedims_l)
+
+        pos = (previous):(maximum(label_gr) - 1 + includedims_r)
+        if length(pos) == 0
             continue
         end
         push!(tm, pos => label)
@@ -494,7 +601,6 @@ function mark_before!(tm::TextModifier, s::String, label::Symbol;
 
     return nothing
 end
-
 
 """
 ```julia
@@ -535,30 +641,44 @@ mark_julia!(tm::TextModifier) = begin
 function mark_after!(tm::TextModifier, s::String, label::Symbol;
     until::Vector{String} = Vector{String}(), includedims_l::Int64 = 0,
     includedims_r::Int64 = 0)
-    chars = findall(s, tm.raw)
-    for labelrange in chars
-        ending = findnext(" ", tm.raw, labelrange[end])
-        if isnothing(ending)
-            ending = length(tm.raw)
+    starts = _grapheme_starts(tm.raw)
+    chars = collect(graphemes(tm.raw))
+    positions = findall(s, tm.raw)
+    until_positions = Dict{String, Vector{UnitRange{Int}}}()
+    for d in until
+        until_positions[d] = findall(d, tm.raw)
+    end
+    total_gr = length(starts)
+    for labelrange_byte in positions
+        label_gr = _byte_range_to_grapheme_range(starts, labelrange_byte)
+        ending_gr = total_gr
+
+        # if there is a plain-space terminator after label in byte-space:
+        sp_byte = findnext(" ", tm.raw, last(labelrange_byte))
+        if sp_byte === nothing
+            ending_gr = total_gr
         else
-            ending = ending[1]
+            ending_gr = _bytepos_to_grapheme_index(starts, sp_byte[1])
         end
-        
         if length(until) > 0
-            lens = [begin
-                        point = findnext(d, tm.raw, maximum(labelrange) + 1)
-                        if ~(isnothing(point))
-                            maximum(point) - 1
-                        else
-                            length(tm.raw)
-                        end
-                    end for d in until]
-            ending = minimum(lens)
+            lens = Int[]
+            for d in until
+                poslist = until_positions[d]
+                cand_idx = findfirst(p -> first(p) > last(labelrange_byte), poslist)
+                if ~(isnothing(cand_idx))
+                    p = poslist[cand_idx]
+                    # convert to grapheme and take start position - 1
+                    pgr = _byte_range_to_grapheme_range(starts, p)
+                    push!(lens, minimum(pgr) - 1)
+                else
+                    push!(lens, total_gr)
+                end
+            end
+            ending_gr = minimum(lens)
         end
-        pos = (minimum(labelrange) - includedims_l):(ending - includedims_r)
+        pos = (minimum(label_gr) - includedims_l):(ending_gr - includedims_r)
         push!(tm, pos => label)
     end
-    
     nothing::Nothing
 end
 
@@ -586,44 +706,36 @@ The new `TextStyleModifier` will be passed the styles from the provided `TextSty
 - See also: mark_after!, clear!, `mark_for!`, `string(::TextStyleModifier)`, `julia_block!`
 """
 function mark_inside!(f::Function, tm::TextModifier, label::Symbol)
-    only_these_marks = filter(mark -> mark[2] == label, tm.marks)
-    for key in keys(only_these_marks)
-        # Create a new TextModifier for the subrange and apply the function
-        new_tm = TextStyleModifier(tm.raw[key])
+    starts = _grapheme_starts(tm.raw)
+    total = length(starts)
+    keys_to_process = [k for (k,v) in tm.marks if v == label && length(k) > 0 && maximum(k) <= total]
+    for key in keys_to_process
+        # extract substring corresponding to the grapheme-range
+        br = _grapheme_range_to_byte_range(starts, key, tm.raw)
+        sub = tm.raw[br]
+        new_tm = TextStyleModifier(sub)
         new_tm.styles = tm.styles
         f(new_tm)
         base_pos = minimum(key)
-        lendiff = base_pos - 1
-        new_marks = Dict(
-            (minimum(range) + lendiff):(maximum(range) + lendiff) => lbl
-            for (range, lbl) in new_tm.marks
-        )
-        sortedmarks = sort(collect(new_marks), by=x -> x[1])
-        final_marks = Vector{Pair{UnitRange{Int64}, Symbol}}()
-        at_mark = 1
-        n = length(sortedmarks)
         kmax = maximum(key)
-        # Process the marks and avoid duplicates
-        while true
-            if at_mark > n || n == 0
-                # Push remaining range up to kmax, if any
-                if base_pos <= kmax
-                    push!(final_marks, base_pos:kmax => label)
-                end
-                break
+        converted = Vector{Pair{UnitRange{Int64}, Symbol}}()
+        for (r, lbl) in new_tm.marks
+            new_r = (minimum(r) + base_pos - 1):(maximum(r) + base_pos - 1)
+            push!(converted, new_r => lbl)
+        end
+        sorted_c = sort(converted, by = x -> x[1])
+        cursor = base_pos
+        final_marks = Vector{Pair{UnitRange{Int64}, Symbol}}()
+        for p in sorted_c
+            r = p[1]; lbl = p[2]
+            if cursor < minimum(r)
+                push!(final_marks, cursor:(minimum(r) - 1) => label)
             end
-            this_mark = sortedmarks[at_mark]
-            new_min = minimum(this_mark[1])
-            # Add range from base_pos to the start of this_mark, if non-empty
-            if base_pos < new_min
-                push!(final_marks, base_pos:(new_min - 1) => label)
-            end
-
-            # Add the current mark and update base_pos to its end
-            push!(final_marks, this_mark[1] => this_mark[2])
-            base_pos = maximum(this_mark[1]) + 1
-
-            at_mark += 1
+            push!(final_marks, r => lbl)
+            cursor = maximum(r) + 1
+        end
+        if cursor <= kmax
+            push!(final_marks, cursor:kmax => label)
         end
         delete!(tm.marks, key)
         push!(tm.marks, final_marks...)
@@ -649,14 +761,17 @@ string(tm)
 - See also: `mark_line_after!`, `mark_julia!`, `string(::TextStyleModifier)`
 """
 function mark_for!(tm::TextModifier, ch::String, f::Int64, label::Symbol)
-    if length(tm.raw) == 1
+    starts = _grapheme_starts(tm.raw)
+    total = length(starts)
+    if total <= 1
         return
     end
     chars = findall(ch, tm.raw)
-    for pos in chars
-        if ~(length(findall(i -> length(findall(n -> n in i, pos)) > 0,
-            collect(keys(tm.marks)))) > 0)
-            push!(tm.marks, minimum(pos):maximum(pos) + f => label)
+    for pos_byte in chars
+        gr = _byte_range_to_grapheme_range(starts, pos_byte)
+        existing = length(findall(i -> length(findall(n -> (n in i), pos_byte)) > 0, collect(keys(tm.marks))))
+        if ~(existing > 0)
+            push!(tm.marks, minimum(gr):(maximum(gr) + f) => label)
         end
     end
     nothing::Nothing
@@ -705,11 +820,11 @@ OliveHighlighters.mark_julia!(lighter)
 ```
 - See also: `mark_line_after!`, `style_julia!`, `mark_between!`, `TextStyleModifier`
 """
-mark_julia!(tm::TextModifier) = begin
+function mark_julia!(tm::TextModifier)
     tm.raw = replace(tm.raw, "<br>" => "\n", "</br>" => "\n", "&nbsp;" => " ")
     # comments
     mark_between!(tm, "#=", "=#", :comment)
-    
+
     # strings + string interpolation
     mark_between!(tm, "\"\"\"", :string)
     mark_line_after!(tm, "#", :comment)
@@ -729,10 +844,9 @@ mark_julia!(tm::TextModifier) = begin
     mark_before!(tm, "(", :funcn, until = UNTILS)
     mark_between!(tm, "{", "}", :params)
     mark_before!(tm, "{", :type, until = UNTILS)
-    # type annotations
     # macros
     mark_after!(tm, "@", :macro, until = UNTILS)
-    
+
     # keywords
     mark_all!(tm, "function", :func)
     mark_all!(tm, "import", :import)
@@ -789,7 +903,7 @@ my_result::String = string(lighter)
 ```
 - See also: `mark_line_after!`, `style_julia!`, `mark_between!`, `TextStyleModifier`
 """
-style_julia!(tm::TextStyleModifier) = begin
+function style_julia!(tm::TextStyleModifier)
     style!(tm, :default, ["color" => "#3D3D3D"])
     style!(tm, :func, ["color" => "#944d94"])
     style!(tm, :funcn, ["color" => "#2d65a8"])
@@ -994,61 +1108,85 @@ display("text/html", string(tm))
 ```
 - See also: `TextStyleModifier`, `style_toml!`, `clear!`, `set_text!`
 """
-function string(tm::TextStyleModifier; args ...)
+function string(tm::TextStyleModifier; args...)
     filter!(mark -> ~(length(mark[1]) < 1), tm.marks)
-    sortedmarks = sort(collect(tm.marks), by=x->x[1])
+    sortedmarks = sort(collect(tm.marks), by = x -> x[1])
     n::Int64 = length(sortedmarks)
     if n == 0
-        txt = a("-", text = rep_str(tm.raw); args ...)
-        style!(txt, tm.styles[:default] ...)
-        return(string(txt))::String
+        txt = a("-", text = rep_str(tm.raw); args...)
+        style!(txt, tm.styles[:default]...)
+        return string(txt)
     end
     at_mark::Int64 = 1
     output::String = ""
-    mark_start::Int64 = minimum(sortedmarks[1][1])
+    chars = collect(graphemes(tm.raw))
+    total_chars = length(chars)
+
+    mark_start = first(sortedmarks[1][1])
     if mark_start > 1
-        txt = span("-", text = rep_str(tm.raw[1: mark_start - 1]);  args ...)
-        style!(txt, tm.styles[:default] ...)
+        txt = span("-", text = rep_str(join(chars[1:mark_start - 1])); args...)
+        style!(txt, tm.styles[:default]...)
         output = string(txt)
     end
+
     while true
-        mark = sortedmarks[at_mark][1]
+        mark_range = sortedmarks[at_mark][1]
+        mark_style = sortedmarks[at_mark][2]
+
+        startidx = first(mark_range)
+        endidx = last(mark_range)
+
+        # Text between marks
         if at_mark != 1
-            last_mark = sortedmarks[at_mark - 1][1]
-            lastmax = maximum(last_mark)
-            if minimum(mark) - lastmax > 0
-                txt = span("-", text = rep_str(tm.raw[lastmax + 1:minimum(mark) - 1]); args ...)
-                style!(txt, tm.styles[:default] ...)
-                output = output * string(txt)
+            last_range = sortedmarks[at_mark - 1][1]
+            lastmax = last(last_range)
+            if startidx - lastmax > 1
+                txt = span("-", text = rep_str(join(chars[lastmax + 1:startidx - 1])); args...)
+                style!(txt, tm.styles[:default]...)
+                output *= string(txt)
             end
         end
-        styname = sortedmarks[at_mark][2]
+
+        # Styled marked region
         try
-            txt = span("-", text = rep_str(tm.raw[mark]); args ...)
+            txt = span("-", text = rep_str(join(chars[startidx:endidx])); args...)
         catch e
-            @warn "error with text: " * tm.raw
-            @warn "positions: $mark"
-            @warn "mark: $styname"
-            throw(e)
+            @warn "error with text: $tm.raw"
+            @warn "positions: $mark_range"
+            @warn "mark: $mark_style"
+            at_mark += 1
+            if at_mark == n
+                if endidx < total_chars
+                    txt = span("-", text = rep_str(join(chars[endidx + 1:end])); args...)
+                    style!(txt, tm.styles[:default]...)
+                    output *= string(txt)
+                end
+                break
+            end
+            continue
         end
-        if styname in keys(tm.styles)
-            style!(txt, tm.styles[styname] ...)
+
+        if haskey(tm.styles, mark_style)
+            style!(txt, tm.styles[mark_style]...)
         else
-            style!(txt, tm.styles[:default] ...)
+            style!(txt, tm.styles[:default]...)
         end
-        output = output * string(txt)
+
+        output *= string(txt)
+
         if at_mark == n
-            if maximum(mark) != length(tm.raw)
-                txt = span("-", text = rep_str(tm.raw[maximum(mark) + 1:length(tm.raw)]); args ...)
-                style!(txt, tm.styles[:default] ...)
-                output = output * string(txt)
+            if endidx < total_chars
+                txt = span("-", text = rep_str(join(chars[endidx + 1:end])); args...)
+                style!(txt, tm.styles[:default]...)
+                output *= string(txt)
             end
             break
         end
         at_mark += 1
     end
+
     sortedmarks = nothing
-    output::String
+    return output
 end
 
 export Highlighter, clear!, set_text!, classes, style!, remove!
