@@ -1,18 +1,24 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.9.2"
+julia_version = "1.11.5"
 manifest_format = "2.0"
-project_hash = "541ffa165ceec2ef2d1387f2ee0b9389336f52ff"
+project_hash = "c159a0462fde271bec1fa64426e484b2e4e04da4"
 
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
+version = "1.11.0"
 
 [[deps.Markdown]]
 deps = ["Base64"]
 uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
+version = "1.11.0"
 
 [[deps.ToolipsServables]]
 deps = ["Base64", "Markdown"]
-git-tree-sha1 = "4913d8fdb9c11a2f3e10ca050a04c44e71e2c597"
+git-tree-sha1 = "f514dee93c69446e67466b81e829908d3435687c"
 uuid = "bf3a9e68-ca66-4981-8178-9d71c4f8abaa"
-version = "0.1.5"
+version = "0.2.5"
+
+[[deps.Unicode]]
+uuid = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"
+version = "1.11.0"
