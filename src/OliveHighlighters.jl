@@ -412,46 +412,39 @@ string(hl)
 """
 function mark_all!(tm::TextModifier, s::String, label::Symbol)
     starts = _grapheme_starts(tm.raw)
-    chars = collect(graphemes(tm.raw))
-    total = length(chars)
-    for byte_range in findall(s, tm.raw)
-        gr = _byte_range_to_grapheme_range(starts, byte_range)
-        valmax = last(gr)
-        if valmax == total && first(gr) == 1
-            push!(tm, gr => label)
-        elseif valmax == total
-            if first(gr) > 1 && _is_offender(chars[first(gr) - 1])
-                push!(tm, gr => label)
-            end
-        elseif first(gr) == 1
-            if valmax < 1
-                continue
-            end
-            if valmax < total && _is_offender(chars[valmax + 1])
-                push!(tm, gr => label)
-            end
-        else
-            if total < valmax
-                continue
-            end
-            before_ok = first(gr) > 1 && _is_offender(chars[first(gr) - 1])
-            after_ok  = valmax < total && _is_offender(chars[valmax + 1])
-            if before_ok && after_ok
-                push!(tm, gr => label)
-            end
-        end
-    end
-    nothing::Nothing
-end
+    offender = raw"[^\p{L}\p{N}]"
+    quoted = "\\Q" * s * "\\E"
+    pattern = "(?:\\A|(?<=$offender))" * quoted * "(?:\\z|(?=$offender))"
+    pat = Regex(pattern)
 
-function mark_all!(tm::TextModifier, c::Char, label::Symbol)
-    starts = _grapheme_starts(tm.raw)
-    for byte_range in findall(string(c), tm.raw)
+    for m in eachmatch(pat, tm.raw)
+        byte_range = m.offset:(m.offset + ncodeunits(m.match) - 1)
         gr = _byte_range_to_grapheme_range(starts, byte_range)
         push!(tm, gr => label)
     end
-    nothing::Nothing
+    nothing
 end
+
+function mark_all!(tm::TextModifier, c::Char, label::Symbol; is_number_only::Bool=false)
+	starts = _grapheme_starts(tm.raw)
+	esc_c = "\\Q" * string(c) * "\\E"
+
+	if is_number_only && isnumeric(c)
+		pattern = "(?:\\A|(?<=[^\\p{L}]))" * esc_c * "(?:\\z|(?=[^\\p{L}]))"
+		pat = Regex(pattern)
+	else
+		pat = Regex(esc_c)
+	end
+
+	for m in eachmatch(pat, tm.raw)
+		byte_range = m.offset:(m.offset + ncodeunits(m.match) - 1)
+		gr = _byte_range_to_grapheme_range(starts, byte_range)
+		push!(tm, gr => label)
+	end
+
+	nothing::Nothing
+end
+
 
 """
 ```julia
@@ -842,11 +835,22 @@ function mark_julia!(tm::TextModifier)
     # functions
     mark_after!(tm, "::", :type, until = UNTILS)
     mark_before!(tm, "(", :funcn, until = UNTILS)
+    mark_after!(tm, " :", :symbol, until = UNTILS)
+    mark_after!(tm, "\n:", :symbol, until = UNTILS)
+    mark_after!(tm, ",:", :symbol, until = UNTILS)
+    mark_after!(tm, "(:", :symbol, until = UNTILS)
     mark_between!(tm, "{", "}", :params)
+    mark_inside!(tm, :params) do tm2::TextStyleModifier
+        mark_after!(tm2, ":", :symbol, until = UNTILS)
+        for dig in digits(1234567890)
+            mark_all!(tm2, Char('0' + dig), :number, is_number_only = true)
+        end
+        mark_all!(tm2, "true", :number)
+        mark_all!(tm2, "false", :number)
+    end
     mark_before!(tm, "{", :type, until = UNTILS)
     # macros
     mark_after!(tm, "@", :macro, until = UNTILS)
-
     # keywords
     mark_all!(tm, "function", :func)
     mark_all!(tm, "import", :import)
@@ -861,9 +865,9 @@ function mark_julia!(tm::TextModifier)
     mark_all!(tm, "else", :if)
     mark_all!(tm, "elseif", :if)
     mark_all!(tm, "in", :in)
-    mark_all!(tm, "export ", :using)
-    mark_all!(tm, "try ", :if)
-    mark_all!(tm, "catch ", :if)
+    mark_all!(tm, "export", :using)
+    mark_all!(tm, "try", :if)
+    mark_all!(tm, "catch", :if)
     mark_all!(tm, "elseif", :if)
     mark_all!(tm, "for", :for)
     mark_all!(tm, "while", :for)
@@ -872,7 +876,7 @@ function mark_julia!(tm::TextModifier)
     mark_all!(tm, "module", :module)
     # math
     for dig in digits(1234567890)
-        mark_all!(tm, Char('0' + dig), :number)
+        mark_all!(tm, Char('0' + dig), :number, is_number_only = true)
     end
     mark_all!(tm, "true", :number)
     mark_all!(tm, "false", :number)
@@ -903,8 +907,10 @@ my_result::String = string(lighter)
 ```
 - See also: `mark_line_after!`, `style_julia!`, `mark_between!`, `TextStyleModifier`
 """
-function style_julia!(tm::TextStyleModifier)
-    style!(tm, :default, ["color" => "#3D3D3D"])
+function style_julia!(tm::TextStyleModifier; exclude_default::Bool = false)
+    if ~(exclude_default)
+        style!(tm, :default, ["color" => "#3D3D3D"])
+    end
     style!(tm, :func, ["color" => "#944d94"])
     style!(tm, :funcn, ["color" => "#2d65a8"])
     style!(tm, :using, ["color" => "#006C67"])
@@ -926,6 +932,7 @@ function style_julia!(tm::TextStyleModifier)
     style!(tm, :op, ["color" => "#0C023E"])
     style!(tm, :macro, ["color" => "#43B3AE"])
     style!(tm, :params, ["color" => "#00008B"])
+    style!(tm, :symbol, ["color" => "#a154bf"])
     style!(tm, :comment, ["color" => "#808080"])
     style!(tm, :interp, ["color" => "#420000"])
     style!(tm, :global, ["color" => "#ff0066"])
@@ -979,12 +986,17 @@ result::String = string(md_hl)
 - See also: `mark_line_after!`, `style_markdown!`, `mark_julia!`, `TextStyleModifier`
 """
 function mark_markdown!(tm::OliveHighlighters.TextModifier)
-    OliveHighlighters.mark_after!(tm, "# ", until = ["\n"], :heading)
+    mark_between!(tm, "```julia", "```", :julia)
+    mark_inside!(tm, :julia) do tm2::TextModifier
+        mark_julia!(tm2)
+    end
+    OliveHighlighters.mark_line_after!(tm, "#", :heading)
     OliveHighlighters.mark_between!(tm, "[", "]", :keys)
     OliveHighlighters.mark_between!(tm, "(", ")", :link)
     OliveHighlighters.mark_between!(tm, "**", :bold)
     OliveHighlighters.mark_between!(tm, "*", :italic)
     OliveHighlighters.mark_between!(tm, "``", :code)
+    OliveHighlighters.mark_between!(tm, "`", :code)
     nothing::Nothing
 end
 
@@ -1010,13 +1022,15 @@ result::String = string(md_hl)
 """
 function style_markdown!(tm::OliveHighlighters.TextStyleModifier)
     style!(tm, :link, ["color" => "#D67229"])
-    style!(tm, :heading, ["color" => "#1f0c2e"])
+    style!(tm, :heading, ["color" => "#954299"])
     style!(tm, :bold, ["color" => "#0f1e73"])
     style!(tm, :italic, ["color" => "#8b0000"])
     style!(tm, :keys, ["color" => "#ffc000"])
     style!(tm, :code, ["color" => "#8b0000"])
     style!(tm, :default, ["color" => "#1c0906"])
     style!(tm, :link, ["color" => "#8b0000"])
+    style!(tm, :julia, ["color" => "#b52157"])
+    style_julia!(tm, exclude_default = true)
 end
 
 """
@@ -1044,7 +1058,7 @@ function mark_toml!(tm::OliveHighlighters.TextModifier)
     OliveHighlighters.mark_between!(tm, "\"", :string)
     OliveHighlighters.mark_all!(tm, "=", :equals)
     for dig in digits(1234567890)
-        OliveHighlighters.mark_all!(tm, string(dig), :number)
+        OliveHighlighters.mark_all!(tm, string(dig), :number, is_number_only = true)
     end
 end
 
