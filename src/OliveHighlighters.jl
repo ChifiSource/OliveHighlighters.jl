@@ -990,7 +990,7 @@ function mark_markdown!(tm::OliveHighlighters.TextModifier)
     mark_inside!(tm, :julia) do tm2::TextModifier
         mark_julia!(tm2)
     end
-    OliveHighlighters.mark_line_after!(tm, "\n#", :heading)
+    OliveHighlighters.mark_between!(tm, "#", "\n", :heading)
     OliveHighlighters.mark_between!(tm, "[", "]", :keys)
     OliveHighlighters.mark_between!(tm, "(", ")", :link)
     OliveHighlighters.mark_between!(tm, "**", :bold)
