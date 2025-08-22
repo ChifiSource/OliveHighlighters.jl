@@ -990,7 +990,7 @@ function mark_markdown!(tm::OliveHighlighters.TextModifier)
     mark_inside!(tm, :julia) do tm2::TextModifier
         mark_julia!(tm2)
     end
-    OliveHighlighters.mark_line_after!(tm, "#", :heading)
+    OliveHighlighters.mark_between!(tm, "#", "\n", :heading)
     OliveHighlighters.mark_between!(tm, "[", "]", :keys)
     OliveHighlighters.mark_between!(tm, "(", ")", :link)
     OliveHighlighters.mark_between!(tm, "**", :bold)
@@ -1058,7 +1058,7 @@ function mark_toml!(tm::OliveHighlighters.TextModifier)
     OliveHighlighters.mark_between!(tm, "\"", :string)
     OliveHighlighters.mark_all!(tm, "=", :equals)
     for dig in digits(1234567890)
-        OliveHighlighters.mark_all!(tm, string(dig), :number, is_number_only = true)
+        OliveHighlighters.mark_all!(tm, string(dig)[1], :number, is_number_only = true)
     end
 end
 
